@@ -882,6 +882,7 @@ function Show-ProfileHelp {
 Set-Alias -Name profile-help -Value Show-ProfileHelp -ErrorAction SilentlyContinue
 
 function Prompt {
+    # Figure out time of last completed command (or now if none)
     $timeText = ""
     $hist = Get-History -ErrorAction SilentlyContinue | Select-Object -Last 1
     if ($hist -and $hist.EndExecutionTime) {
@@ -892,29 +893,45 @@ function Prompt {
 
     $path = (Get-Location).Path
 
-    $reset = "`e[0m"
-    if ($PSStyle) { $reset = $PSStyle.Reset }
+    # Decide if we should use ANSI colors (only in pwsh 7+ with PSStyle)
+    $useColor = $false
+    if ($PSVersionTable.PSVersion.Major -ge 7 -and $PSStyle) {
+        $useColor = $true
+    }
 
+    $reset = ""
     $timeColor = ""
     $pathColor = ""
     $promptColor = ""
 
-    if ($Flavor) {
+    if ($useColor -and $Flavor) {
+        $reset      = $PSStyle.Reset
         $timeColor   = $Flavor.Teal.Foreground()
         $pathColor   = $Flavor.Yellow.Foreground()
         $promptColor = $Flavor.Green.Foreground()
     }
 
     Write-Host "[" -NoNewline
-    if ($timeColor) { Write-Host "$timeColor$timeText$reset" -NoNewline }
-    else { Write-Host "$timeText" -NoNewline }
+
+    if ($useColor -and $timeColor) {
+        Write-Host "$timeColor$timeText$reset" -NoNewline
+    } else {
+        Write-Host "$timeText" -NoNewline
+    }
+
     Write-Host "] " -NoNewline
 
-    if ($pathColor) { Write-Host "$pathColor$path$reset" -NoNewline }
-    else { Write-Host "$path" -NoNewline }
+    if ($useColor -and $pathColor) {
+        Write-Host "$pathColor$path$reset" -NoNewline
+    } else {
+        Write-Host "$path" -NoNewline
+    }
 
-    if ($promptColor) { Write-Host " $promptColor> $reset" -NoNewline }
-    else { Write-Host " > " -NoNewline }
+    if ($useColor -and $promptColor) {
+        Write-Host " $promptColor> $reset" -NoNewline
+    } else {
+        Write-Host " > " -NoNewline
+    }
 
     return " "
 }

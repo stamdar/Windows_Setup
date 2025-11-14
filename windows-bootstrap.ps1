@@ -245,17 +245,29 @@ foreach ($pkg in $ChocoPackages) {
     Ensure-ChocoPackage -Id $pkg.Id -Name $pkg.Name
 }
 
-Write-Host "[*] Ensuring pipx via Python (Windows user install)..." -ForegroundColor Cyan
+# -----------------------------
+#  Ensure pip and pipx on Windows
+# -----------------------------
+
+Write-Host "[*] Ensuring pip and pipx (Windows)..." -ForegroundColor Cyan
 try {
     $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) {
-        python -m pip install --user pipx
-        Write-Host "[+] pipx installed via pip (user scope)." -ForegroundColor Green
+    if (-not $python) {
+        Write-Warning "Python executable not found on PATH; skipping pip/pipx setup."
     } else {
-        Write-Warning "Python not found on PATH; skipping pipx install."
+        Write-Host "[*] Upgrading pip..." -ForegroundColor Yellow
+        python -m pip install --upgrade pip --disable-pip-version-check
+
+        Write-Host "[*] Installing/upgrading pipx via pip..." -ForegroundColor Yellow
+        python -m pip install --user pipx --upgrade
+
+        Write-Host "[*] Running pipx ensurepath..." -ForegroundColor Yellow
+        python -m pipx ensurepath
+
+        Write-Host "[+] pip and pipx are now installed/upgraded (user scope)." -ForegroundColor Green
     }
 } catch {
-    Write-Warning "Failed to install pipx via pip: $($_.Exception.Message)"
+    Write-Warning "pip/pipx setup failed: $($_.Exception.Message)"
 }
 
 Write-Host "[*] Installing Sysinternals Suite (ignoring checksums, best effort)..." -ForegroundColor Cyan

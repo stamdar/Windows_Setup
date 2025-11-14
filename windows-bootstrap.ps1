@@ -282,7 +282,6 @@ try {
     Write-Warning "Sysinternals installation threw an exception: $($_.Exception.Message)"
 }
 
-
 Write-Host "[*] Cleaning up newly created desktop shortcuts..." -ForegroundColor Cyan
 $FinalShortcuts = Get-DesktopShortcuts
 $NewShortcuts = $FinalShortcuts | Where-Object { $_ -notin $ExistingShortcuts }
@@ -294,6 +293,52 @@ foreach ($lnk in $NewShortcuts) {
         Write-Warning "Failed to remove shortcut ${lnk}: $($_.Exception.Message)"
     }
 }
+
+Write-Host "[*] Redirecting legacy 'Windows PowerShell' shortcuts to PowerShell 7..." -ForegroundColor Cyan
+
+$pwshPath = (Get-Command pwsh).Source
+$shortcutDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows PowerShell"
+
+if (Test-Path $shortcutDir) {
+    $shell = New-Object -ComObject WScript.Shell
+    Get-ChildItem -Path $shortcutDir -Filter *.lnk | ForEach-Object {
+        try {
+            $sc = $shell.CreateShortcut($_.FullName)
+            $sc.TargetPath = $pwshPath
+            $sc.Arguments  = ""
+            $sc.Save()
+            Write-Host "[+] Updated shortcut: $($_.Name)" -ForegroundColor Green
+        } catch {
+            Write-Warning "Failed to update $($_.FullName): $($_.Exception.Message)"
+        }
+    }
+}
+
+Write-Host "[*] Creating powershell.cmd shim to redirect to PowerShell 7..." -ForegroundColor Cyan
+
+$shim = "$env:ProgramFiles\PowerShell\7\powershell.cmd"
+if (-not (Test-Path $shim)) {
+    '@echo off
+"%ProgramFiles%\PowerShell\7\pwsh.exe" %*
+' | Set-Content $shim -Encoding ASCII
+    Write-Host "[+] Created shim: powershell.cmd -> pwsh.exe" -ForegroundColor Green
+}
+
+# Ensure PowerShell 7 directory is first in PATH
+Add-Path -NewPath "$env:ProgramFiles\PowerShell\7" -Scope Machine
+
+
+Write-Host "[*] Adding Windows Terminal autostart..." -ForegroundColor Cyan
+
+$wt = (Get-Command wt.exe -ErrorAction SilentlyContinue)
+if ($wt) {
+    $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+    Set-ItemProperty -Path $runKey -Name "WindowsTerminal" -Value $wt.Source -Force
+    Write-Host "[+] Windows Terminal will now auto-start at login." -ForegroundColor Green
+} else {
+    Write-Warning "wt.exe not found — skipping autostart registration."
+}
+
 
 # -----------------------------
 #  Default App Associations via SetUserFTA

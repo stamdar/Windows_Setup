@@ -16,6 +16,8 @@ param(
     [switch]$SkipDebloat
 )
 
+$ScriptStart = Get-Date
+
 # -----------------------------
 #  Elevation / Admin Check
 # -----------------------------
@@ -188,15 +190,23 @@ function Ensure-ChocoPackage {
 }
 
 function Get-DesktopShortcuts {
-    $paths = @(
+    $candidatePaths = @(
         "$env:PUBLIC\Desktop",
         "$env:USERPROFILE\Desktop"
-    ) | Where-Object { Test-Path $_ }
+    )
+
+    # If OneDrive is redirecting Desktop, include that too
+    if ($env:OneDrive) {
+        $candidatePaths += (Join-Path $env:OneDrive "Desktop")
+    }
+
+    $paths = $candidatePaths | Where-Object { Test-Path $_ }
 
     $shortcuts = @()
     foreach ($p in $paths) {
         $shortcuts += Get-ChildItem -Path $p -Filter *.lnk -ErrorAction SilentlyContinue
     }
+
     return $shortcuts.FullName | Sort-Object -Unique
 }
 

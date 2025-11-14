@@ -1,6 +1,6 @@
 # Windows Workstation Bootstrap Script
 
-## 🔧 Quick Usage Examples
+## 🔧 Quick Usage Examples (Most Important — Read First)
 
 ### **Run directly from the internet (PowerShell 7 recommended)**
 
@@ -26,36 +26,46 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 # Overview
 
-A comprehensive Windows workstation automation script targeted at developers, engineers, and security analysts.  
-This script handles system configuration, application installation, UI/UX enhancements, PowerShell customization, WSL provisioning, and theming—automatically, idempotently, and consistently.
+A comprehensive and idempotent Windows workstation bootstrap script aimed at developers, security researchers, and engineers.  
+This script configures the operating system, installs and updates software, applies UI/Explorer and privacy tweaks, configures PowerShell, provisions WSL, and applies consistent Catppuccin Mocha theming across major applications.
 
 ---
 
 # 📦 Features
 
 ## System Preparation
-- Auto-elevates to Administrator
-- Detects OS (Win10/11/Server)
-- Optional Windows 11 debloat (Raphire/Win11Debloat)
-- Privacy hardening (disable telemetry, web search, spotlight, lock screen ads)
-- Explorer tweaks (show file extensions, hidden files, remove 3D Objects)
-- Dark theme applied system-wide
-- Taskbar cleanup + deterministic app ordering
-- Classic right-click menu on Windows 11
+- Auto‐elevates to Administrator  
+- Detects OS version (Windows 10, 11, Server)  
+- Optional Windows 11 debloat using **Raphire/Win11Debloat**  
+- Infers OneDrive presence and adapts desktop cleanup  
+- Privacy hardening (Disable telemetry, Spotlight, Start web search, lock screen ads)  
+- Explorer/UI enhancements:
+  - Show file extensions  
+  - Show hidden & protected OS files  
+  - Remove “3D Objects”  
+  - Dark theme system-wide  
+  - Classic right-click (Win11)  
+- Windows Terminal Auto-start at login  
+- Deterministic taskbar ordering  
 
-## Application Installation via Chocolatey
+---
+
+# 📦 Application Installation via Chocolatey
+
 Installs or updates:
 
 - Windows Terminal  
-- Sublime Text 4  
+- Sublime Text  
 - Visual Studio Code  
 - Obsidian  
 - Chrome, Firefox  
-- Python3, Go, Rust, Git, pipx  
-- Nmap, Netcat, Npcap, Wireshark  
-- OpenSSL, OpenSSH  
+- Python3, pip, pipx  
+- Go, Rust  
+- Git  
+- Nmap, Npcap, Wireshark  
 - jq, Everything Search  
-- Process Hacker, Sysinternals  
+- Process Hacker  
+- Sysinternals Suite  
 - 7zip, Adobe Reader  
 - GNU Coreutils (GOW)  
 - SetUserFTA  
@@ -63,79 +73,85 @@ Installs or updates:
 
 Desktop shortcuts created during installation are automatically removed.
 
-## Default File Associations (SetUserFTA)
+---
+
+# Default File Associations (SetUserFTA)
+
 - Sublime → .txt, .ini, .cfg  
-- VSCode → .c, .cpp, .py, .ps1, .json, .yaml, etc.  
+- VSCode → .c, .cpp, .py, .json, .yaml, .ps1  
 - Adobe Reader → .pdf  
-- Wireshark → .pcap / .pcapng  
+- Wireshark → .pcap/.pcapng  
 - Obsidian → .md  
-- Chrome → Default browser  
+- Chrome → http/https/.htm/.html  
 
 ---
 
-# 🎨 Theming
+# 🎨 Theming (Catppuccin Mocha)
 
 ### Windows Terminal
-- Catppuccin **Mocha** theme injected into `settings.json`.
-- Applied to all PowerShell profiles.
+- Full Catppuccin Mocha scheme injected and applied.
 
-### VSCode
-- Catppuccin theme + icon pack auto-installed.
-- Mocha enforced.
+### PowerShell
+- Catppuccin module installed  
+- Automatically themed banners and prompts  
+
+### VS Code
+- Installs Catppuccin theme + icons  
+- Forces Mocha  
 
 ### Sublime Text
-- Auto-launch to create config directories.
-- Catppuccin theme cloned, Mocha applied.
+- Auto-launch to create config folders  
+- Installs Catppuccin theme  
+- Applies Mocha scheme  
 
 ### Obsidian
-- Creates vault at:  
-  `C:\Users\<User>\Documents\Obsidiant_Vault`
-- Catppuccin theme installed
-- Plugins installed:
-  - Advanced Cursors
-  - Editor Syntax Highlight
-  - Smarter Markdown Hotkeys
+- Creates vault at `C:\Users\<User>\Documents\Obsidiant_Vault`  
+- Catppuccin theme auto-applied  
+- Plugins auto-installed:
+  - Advanced Cursors  
+  - Editor Syntax Highlight  
+  - Smarter Markdown Hotkeys  
 
 ---
 
-# 🧰 PowerShell Environment
+# 🧰 PowerShell Profile Enhancements
 
-### Modules Installed
+Modules auto-installed and auto-imported:
 - PSReadLine  
 - Terminal-Icons  
 - posh-git  
 - PSFzf  
 - Catppuccin  
 
-### Custom Functions & Aliases
-Includes:
-- `explore`
-- `pkill`
-- `Add-Path`
-- `Clear-And-Banner`
-- `sign`
-- `profile-help`
-- Aliases: `ll`, `ifconfig`, `reboot`, `c`, etc.
+Additional modules installed:
+- PowerForensics  
+- HAWK  
+- Pester  
+- ImportExcel  
 
-### Script Signing
-A self-signed code-signing certificate is generated, and the thumbprint is automatically inserted into the `sign` function inside `$PROFILE`.
+Custom functions:
+- `explore`  
+- `pkill`  
+- `Add-Path`  
+- `Clear-And-Banner`  
+- `sign`  
+- `profile-help`  
+
+Script-signing certificate is automatically generated and integrated.
 
 ---
 
 # 🐧 WSL + Ubuntu Provisioning
 
-If WSL/VMPlatform features must be enabled, the script will prompt for reboot.
-
-Ubuntu provisioning includes installation of:
-
+Installs Ubuntu and provisions:
 - build-essential  
 - python3, pip, pipx  
+- tmux, neovim, htop  
 - nmap, netcat-openbsd, tcpdump  
-- tmux, neovim, htop, ncdu  
 - jq, ripgrep, fd, bat  
 - radare2, gdb, valgrind, binwalk  
-- hydra, john, sqlmap, nikto, steghide  
-- and multiple pipx-installed tools (pwntools, ruff, black, etc.)
+- hydra, john, sqlmap, steghide, nikto  
+- Multiple pipx cyber tools (pwntools, ruff, black, scrapy, etc.)
 
 ---
 
@@ -147,132 +163,105 @@ Ubuntu provisioning includes installation of:
 +-------------------------------------------------------------+
             |
             v
-   +------------------+
-   | Admin Elevation  |
-   +------------------+
-            |
-            v
    +------------------------+
-   | OS Detection (10/11)   |
+   | Admin Elevation Check  |
    +------------------------+
             |
             v
    +------------------------+
-   | Optional Win11 Debloat |
+   | OS Detection           |
    +------------------------+
             |
             v
-   +---------------------------+
-   | Install/Upgrade Software  |
-   |    (Chocolatey)           |
-   +---------------------------+
+   +------------------------+
+   | Optional Debloat       |
+   +------------------------+
             |
             v
-   +---------------------------+
-   | Remove Desktop Shortcuts  |
-   +---------------------------+
+   +------------------------------+
+   | Install/Update Applications  |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   | Set Default File Types    |
-   +---------------------------+
+   +------------------------------+
+   | Remove Desktop Shortcuts     |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   | UI / Explorer Tweaks      |
-   +---------------------------+
+   +------------------------------+
+   | Default File Associations    |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   | Taskbar Configuration     |
-   +---------------------------+
+   +------------------------------+
+   | Explorer & UI Tweaks         |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   | PowerShell Profile Setup  |
-   +---------------------------+
+   +------------------------------+
+   | Taskbar Configuration        |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   | App Theming (Catppuccin) |
-   +---------------------------+
+   +------------------------------+
+   | PowerShell Profile Setup     |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   |   Obsidian Vault Setup    |
-   +---------------------------+
+   +------------------------------+
+   | Catppuccin App Theming      |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   |  WSL + Ubuntu Provision   |
-   +---------------------------+
+   +------------------------------+
+   | Obsidian Vault Setup         |
+   +------------------------------+
             |
             v
-   +---------------------------+
-   |     Script Complete       |
-   +---------------------------+
+   +------------------------------+
+   | WSL + Ubuntu Provisioning    |
+   +------------------------------+
+            |
+            v
+   +------------------------------+
+   |        Script Complete       |
+   +------------------------------+
 ```
 
 ---
 
 # 🛠 Troubleshooting
 
-## **Profile didn't load**
-Check if `$PROFILE` exists:
-
+## Profile didn’t load
 ```powershell
 Test-Path $PROFILE
-```
-
-If missing:
-
-```powershell
 New-Item -ItemType File -Path $PROFILE -Force
+. $PROFILE
 ```
 
-Then reload PowerShell.
-
----
-
-## **Explorer changes didn't apply**
-Restart Explorer:
-
+## Explorer changes didn’t apply
 ```powershell
 Stop-Process -Name explorer -Force
-Start-Process explorer.exe
+Start-Process explorer
 ```
 
-On some older builds, log out and log back in.
-
----
-
-## **WSL installation failed**
-
-### 1. Required features not enabled
-Check:
-
-```powershell
-DISM /online /get-features /format:table | findstr /i "WSL"
-```
-
-Enable:
-
+## WSL installation failed
+### 1. Ensure features enabled
 ```powershell
 Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -All
 Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All
 ```
 
-### 2. Missing reboot
-If WSL/VMPlatform were off before, reboot is required.
-
-### 3. Virtualization disabled in BIOS
-Enable Intel VT-x / AMD-V.
-
-### 4. Old kernel
-Update kernel:
-
+### 2. Reboot required  
+### 3. BIOS virtualization disabled  
+### 4. Update kernel
 ```powershell
 wsl --update
+```
+
+### 5. Ubuntu already exists → run:
+```powershell
+wsl -d Ubuntu
 ```
 
 ---

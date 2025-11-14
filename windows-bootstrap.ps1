@@ -247,7 +247,7 @@ foreach ($lnk in $NewShortcuts) {
         Remove-Item -LiteralPath $lnk -Force -ErrorAction Stop
         Write-Host "[+] Removed new desktop shortcut: $lnk" -ForegroundColor DarkGreen
     } catch {
-        Write-Warning "Failed to remove shortcut $lnk: $($_.Exception.Message)"
+        Write-Warning "Failed to remove shortcut ${lnk}: $($_.Exception.Message)"
     }
 }
 
@@ -467,7 +467,7 @@ function Pin-AppToTaskbar {
             Write-Warning "PinToTaskbar verb not found for $AppName."
         }
     } catch {
-        Write-Warning "Failed to pin $AppName: $($_.Exception.Message)"
+        Write-Warning "Failed to pin ${AppName}: $($_.Exception.Message)"
     }
 }
 
@@ -484,7 +484,7 @@ function Unpin-AppFromTaskbar {
             Write-Host "[+] Unpinned $AppName from taskbar." -ForegroundColor Green
         }
     } catch {
-        Write-Warning "Failed to unpin $AppName: $($_.Exception.Message)"
+        Write-Warning "Failed to unpin ${AppName}: $($_.Exception.Message)"
     }
 }
 
@@ -564,7 +564,7 @@ foreach ($m in $CoreModules + $ExtraModules) {
             Write-Host "[=] Module $m already available." -ForegroundColor DarkGray
         }
     } catch {
-        Write-Warning "Failed to install module $m: $($_.Exception.Message)"
+        Write-Warning "Failed to install module ${m}: $($_.Exception.Message)"
     }
 }
 
@@ -1184,28 +1184,44 @@ function Ensure-WSLAndUbuntu {
         "zsh","ripgrep","fd-find","bat","fzf"
     )
 
-    $wslCmd = {
-        echo "[*] Updating apt..." ;
-        sudo apt update ;
-        echo "[*] Upgrading packages..." ;
-        sudo apt upgrade -y ;
-        echo "[*] Installing security tooling..." ;
-        sudo apt install -y @APT_PACKAGES@ ;
-        echo "[*] Ensuring pipx installed..." ;
-        python3 -m pip install --user pipx ;
-        python3 -m pipx ensurepath ;
-        echo "[*] Installing Python tools via pipx..." ;
-        pipx install poetry || true ;
-        pipx install black || true ;
-        pipx install ruff || true ;
-        pipx install bandit || true ;
-        pipx install scrapy || true ;
-        pipx install pwntools || true ;
-    }
+    $aptPackages = @(
+        # Essentials
+        "build-essential","curl","wget","git","python3","python3-pip","python3-venv","pipx","jq","net-tools",
+        "htop","ncdu","tmux","neovim",
+        # Networking
+        "nmap","netcat-openbsd","tcpdump","traceroute","iputils-ping","whois","dnsutils","iptables","mtr",
+        # Security tools
+        "gpg","openssl","hashcat","hydra","john","sqlmap","nikto","dnsrecon","steghide",
+        # RE / debugging
+        "strace","ltrace","radare2","binwalk","gdb","valgrind",
+        # Convenience
+        "zsh","ripgrep","fd-find","bat","fzf"
+    )
 
-    $joined = ($aptPackages -join " ")
-    $wslScript = $wslCmd.ToString().Replace("@APT_PACKAGES@", $joined)
-    $escaped = $wslScript.Replace("`n","; ")
+    $wslScript = @'
+echo "[*] Updating apt..."
+sudo apt update
+echo "[*] Upgrading packages..."
+sudo apt upgrade -y
+echo "[*] Installing security tooling..."
+sudo apt install -y @APT_PACKAGES@
+echo "[*] Ensuring pipx installed..."
+python3 -m pip install --user pipx || true
+python3 -m pipx ensurepath || true
+echo "[*] Installing Python tools via pipx..."
+pipx install poetry   || true
+pipx install black    || true
+pipx install ruff     || true
+pipx install bandit   || true
+pipx install scrapy   || true
+pipx install pwntools || true
+'@
+
+    $joined    = ($aptPackages -join " ")
+    $wslScript = $wslScript.Replace("@APT_PACKAGES@", $joined)
+
+    # Turn newlines into ; so we can shove it into a single bash -lc string
+    $escaped = $wslScript -replace "`r?`n", "; "
 
     wsl -d Ubuntu -- bash -lc "$escaped"
     Write-Host "[+] Ubuntu provisioning complete (best effort)." -ForegroundColor Green

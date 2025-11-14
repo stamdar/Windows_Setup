@@ -533,10 +533,22 @@ Write-Host "[*] Installing core PowerShell modules..." -ForegroundColor Cyan
 
 # Make sure NuGet provider / PSGallery are available
 try {
-    if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-        Install-PackageProvider -Name NuGet -Force -Scope AllUsers | Out-Null
+    # Ensure TLS 1.2 so NuGet download doesn't choke on older defaults
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
+    $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+    if (-not $nuget) {
+        Write-Host "[*] Installing NuGet package provider..." -ForegroundColor Yellow
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -Confirm:$false | Out-Null
     }
-    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+
+    # Trust PSGallery so Install-Module doesn't prompt
+    $repo = Get-PSRepository -Name "PSGallery" -ErrorAction SilentlyContinue
+    if ($repo -and $repo.InstallationPolicy -ne "Trusted") {
+        Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -ErrorAction Stop
+    }
+
+    Write-Host "[+] NuGet and PSGallery configured." -ForegroundColor Green
 } catch {
     Write-Warning "Failed to configure PSGallery/NuGet: $($_.Exception.Message)"
 }
@@ -559,7 +571,7 @@ foreach ($m in $CoreModules + $ExtraModules) {
     try {
         if (-not (Get-Module -ListAvailable -Name $m)) {
             Write-Host "[*] Installing module $m from PSGallery..." -ForegroundColor Yellow
-            Install-Module -Name $m -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+            Install-Module -Name $m -Scope AllUsers -Force -AllowClobber -Confirm:$false -ErrorAction Stop
         } else {
             Write-Host "[=] Module $m already available." -ForegroundColor DarkGray
         }
@@ -611,8 +623,6 @@ if (-not $cert) {
 } else {
     Write-Host "[=] Found existing code signing certificate: $($cert.Thumbprint)" -ForegroundColor DarkGray
 }
-
-$certThumb = $cert.Thumbprint
 
 # Profile content
 $profileContent = @'
@@ -675,7 +685,7 @@ function pkill {
     try {
         taskkill /f /im $procName 2>$null
     } catch {
-        Write-Warning "Failed to kill process $procName: $($_.Exception.Message)"
+        Write-Warning "Failed to kill process ${procName}: $($_.Exception.Message)"
     }
 }
 
@@ -712,7 +722,8 @@ function Clear-And-Banner {
     }
 
     $ip = Get-PrimaryIPv4
-    $ipStr = "IPv4 addr: " + ($ip ? $ip : "(none)")
+    $ipText = if ($ip) { $ip } else { "(none)" }
+    $ipStr = "IPv4 addr: " + $ipText
 
     $pubStr = "Public IP: (unavailable)"
     try {
@@ -1169,20 +1180,6 @@ function Ensure-WSLAndUbuntu {
     }
 
     Write-Host "[*] Provisioning Ubuntu environment in WSL..." -ForegroundColor Cyan
-
-    $aptPackages = @(
-        # Essentials
-        "build-essential","curl","wget","git","python3","python3-pip","python3-venv","pipx","jq","net-tools",
-        "htop","ncdu","tmux","neovim",
-        # Networking
-        "nmap","netcat-openbsd","tcpdump","traceroute","iputils-ping","whois","dnsutils","iptables","mtr",
-        # Security tools
-        "gpg","openssl","hashcat","hydra","john","sqlmap","nikto","dnsrecon","steghide",
-        # RE / debugging
-        "strace","ltrace","radare2","binwalk","gdb","valgrind",
-        # Convenience
-        "zsh","ripgrep","fd-find","bat","fzf"
-    )
 
     $aptPackages = @(
         # Essentials

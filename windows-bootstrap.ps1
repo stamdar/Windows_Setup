@@ -215,9 +215,7 @@ $ChocoPackages = @(
     @{ Id = "microsoft-windows-terminal"; Name = "Windows Terminal" },
     @{ Id = "vim";                        Name = "Vim" },
     @{ Id = "nmap";                       Name = "Nmap" },
-    @{ Id = "netcat";                     Name = "Netcat" },
     @{ Id = "obsidian";                   Name = "Obsidian" },
-    @{ Id = "npcap";                      Name = "Npcap" },          # before Wireshark
     @{ Id = "wireshark";                  Name = "Wireshark" },
     @{ Id = "vscode";                     Name = "Visual Studio Code" },
     @{ Id = "sublimetext4";               Name = "Sublime Text 4" },
@@ -225,13 +223,11 @@ $ChocoPackages = @(
     @{ Id = "googlechrome";               Name = "Google Chrome" },
     @{ Id = "firefox";                    Name = "Mozilla Firefox" },
     @{ Id = "7zip";                       Name = "7-Zip" },
-    @{ Id = "sysinternals";               Name = "Sysinternals Suite" },
     @{ Id = "processhacker";              Name = "Process Hacker" },
     @{ Id = "jq";                         Name = "jq" },
     @{ Id = "openssl.light";              Name = "OpenSSL (light)" },
     @{ Id = "openssh";                    Name = "OpenSSH" },
     @{ Id = "git";                        Name = "Git" },
-    @{ Id = "pipx";                       Name = "pipx" },
     @{ Id = "everything";                 Name = "Everything Search" },
     @{ Id = "golang";                     Name = "Go" },
     @{ Id = "rustup.install";             Name = "Rust (rustup)" },
@@ -248,6 +244,32 @@ $ExistingShortcuts = Get-DesktopShortcuts
 foreach ($pkg in $ChocoPackages) {
     Ensure-ChocoPackage -Id $pkg.Id -Name $pkg.Name
 }
+
+Write-Host "[*] Ensuring pipx via Python (Windows user install)..." -ForegroundColor Cyan
+try {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        python -m pip install --user pipx
+        Write-Host "[+] pipx installed via pip (user scope)." -ForegroundColor Green
+    } else {
+        Write-Warning "Python not found on PATH; skipping pipx install."
+    }
+} catch {
+    Write-Warning "Failed to install pipx via pip: $($_.Exception.Message)"
+}
+
+Write-Host "[*] Installing Sysinternals Suite (ignoring checksums, best effort)..." -ForegroundColor Cyan
+try {
+    choco install sysinternals -y --no-progress --ignore-checksums
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[+] Sysinternals Suite installed (checksums ignored)." -ForegroundColor Green
+    } else {
+        Write-Warning "Sysinternals install failed with exit code $LASTEXITCODE (even with --ignore-checksums)."
+    }
+} catch {
+    Write-Warning "Sysinternals installation threw an exception: $($_.Exception.Message)"
+}
+
 
 Write-Host "[*] Cleaning up newly created desktop shortcuts..." -ForegroundColor Cyan
 $FinalShortcuts = Get-DesktopShortcuts
@@ -267,7 +289,8 @@ foreach ($lnk in $NewShortcuts) {
 
 function Invoke-SetUserFTA {
     param(
-        [Parameter(Mandatory)][string]$Arguments
+        [Parameter(Mandatory)][string]$Extension,
+        [Parameter(Mandatory)][string]$ProgId
     )
 
     $setUserFtaPath = Get-ChildItem "$env:ProgramData\chocolatey\lib\setuserfta" -Recurse -Filter "SetUserFTA.exe" -ErrorAction SilentlyContinue |
@@ -278,11 +301,11 @@ function Invoke-SetUserFTA {
         return
     }
 
-    & $setUserFtaPath $Arguments
+    & $setUserFtaPath $Extension $ProgId
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "SetUserFTA failed for: $Arguments (exit $LASTEXITCODE)"
+        Write-Warning "SetUserFTA failed for: $Extension -> $ProgId (exit $LASTEXITCODE)"
     } else {
-        Write-Host "[+] SetUserFTA: $Arguments" -ForegroundColor Green
+        Write-Host "[+] SetUserFTA: $Extension -> $ProgId" -ForegroundColor Green
     }
 }
 
@@ -304,29 +327,29 @@ $ObsidianProgId = "Obsidian.md"
 
 # Sublime for text-ish
 ".txt",".log",".ini",".cfg",".conf" | ForEach-Object {
-    Invoke-SetUserFTA "$_,$SublimeProgId"
+    Invoke-SetUserFTA $_ $SublimeProgId
 }
 
 # VS Code for code-ish
 ".c",".h",".hpp",".cpp",".cc",".py",".ps1",".js",".ts",".json",".yml",".yaml",".go",".rs",".lua",".rb" | ForEach-Object {
-    Invoke-SetUserFTA "$_,$VSCodeProgId"
+    Invoke-SetUserFTA $_ $VSCodeProgId
 }
 
 # Adobe for PDFs
-Invoke-SetUserFTA ".pdf,$AdobePdfProgId"
+Invoke-SetUserFTA ".pdf"   $AdobePdfProgId
 
 # Wireshark for captures
-Invoke-SetUserFTA ".pcap,$WiresharkProgId"
-Invoke-SetUserFTA ".pcapng,$WiresharkProgId"
+Invoke-SetUserFTA ".pcap"  $WiresharkProgId
+Invoke-SetUserFTA ".pcapng" $WiresharkProgId
 
 # Chrome as default browser
-Invoke-SetUserFTA "http,$ChromeProgId"
-Invoke-SetUserFTA "https,$ChromeProgId"
-Invoke-SetUserFTA ".htm,$ChromeProgId"
-Invoke-SetUserFTA ".html,$ChromeProgId"
+Invoke-SetUserFTA "http"   $ChromeProgId
+Invoke-SetUserFTA "https"  $ChromeProgId
+Invoke-SetUserFTA ".htm"   $ChromeProgId
+Invoke-SetUserFTA ".html"  $ChromeProgId
 
 # Obsidian for markdown
-Invoke-SetUserFTA ".md,$ObsidianProgId"
+Invoke-SetUserFTA ".md"    $ObsidianProgId
 
 # -----------------------------
 #  Privacy / Telemetry / Search / Lock Screen

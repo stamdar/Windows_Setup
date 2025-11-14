@@ -16,8 +16,6 @@ param(
     [switch]$SkipDebloat
 )
 
-$ScriptStart = Get-Date
-
 # -----------------------------
 #  Elevation / Admin Check
 # -----------------------------
@@ -80,7 +78,8 @@ if ($OS.IsWin11 -and -not $SkipDebloat) {
         if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
 
         $debloatScript = Join-Path $tempDir "Win11Debloat.ps1"
-        $debloatUrl = "https://raw.githubusercontent.com/Raphire/Win11Debloat/main/Win11Debloat.ps1"
+        # Use maintained debloat endpoint
+        $debloatUrl = "https://debloat.raphi.re/"
 
         Invoke-WebRequest -Uri $debloatUrl -OutFile $debloatScript -UseBasicParsing
 
@@ -234,7 +233,7 @@ $ChocoPackages = @(
     @{ Id = "gow";                        Name = "GNU coreutils (Gow)" },
     @{ Id = "adobereader";                Name = "Adobe Reader" },
     @{ Id = "setuserfta";                 Name = "SetUserFTA" },
-    @{ Id = "powershell";                 Name = "PowerShell 7" },
+    @{ Id = "powershell-core";            Name = "PowerShell 7" },
     @{ Id = "fzf";                        Name = "fzf" }
 )
 
@@ -294,39 +293,77 @@ foreach ($lnk in $NewShortcuts) {
     }
 }
 
+# -----------------------------
+#  Make PS7 the default shell (best-effort)
+# -----------------------------
+
 Write-Host "[*] Redirecting legacy 'Windows PowerShell' shortcuts to PowerShell 7..." -ForegroundColor Cyan
 
-$pwshPath = (Get-Command pwsh).Source
-$shortcutDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows PowerShell"
+$pwshCmd  = Get-Command pwsh -ErrorAction SilentlyContinue
+$pwshPath = $pwshCmd.Source
 
-if (Test-Path $shortcutDir) {
-    $shell = New-Object -ComObject WScript.Shell
-    Get-ChildItem -Path $shortcutDir -Filter *.lnk | ForEach-Object {
-        try {
-            $sc = $shell.CreateShortcut($_.FullName)
-            $sc.TargetPath = $pwshPath
-            $sc.Arguments  = ""
-            $sc.Save()
-            Write-Host "[+] Updated shortcut: $($_.Name)" -ForegroundColor Green
-        } catch {
-            Write-Warning "Failed to update $($_.FullName): $($_.Exception.Message)"
+if ($pwshCmd -and (Test-Path $pwshPath)) {
+    $shortcutDir = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows PowerShell"
+
+    if (Test-Path $shortcutDir) {
+        $shell = New-Object -ComObject WScript.Shell
+        Get-ChildItem -Path $shortcutDir -Filter *.lnk | ForEach-Object {
+            try {
+                $sc = $shell.CreateShortcut($_.FullName)
+                $sc.TargetPath = $pwshPath
+                $sc.Arguments  = ""
+                $sc.Save()
+                Write-Host "[+] Updated shortcut: $($_.Name)" -ForegroundColor Green
+            } catch {
+                Write-Warning "Failed to update $($_.FullName): $($_.Exception.Message)"
+            }
         }
     }
+} else {
+    Write-Warning "pwsh.exe not found; skipping legacy shortcut redirection."
 }
 
 Write-Host "[*] Creating powershell.cmd shim to redirect to PowerShell 7..." -ForegroundColor Cyan
 
-$shim = "$env:ProgramFiles\PowerShell\7\powershell.cmd"
-if (-not (Test-Path $shim)) {
-    '@echo off
+$pwshDir = Join-Path $env:ProgramFiles "PowerShell\7"
+$shim    = Join-Path $pwshDir "powershell.cmd"
+
+if (Test-Path $pwshDir) {
+    if (-not (Test-Path $shim)) {
+        '@echo off
 "%ProgramFiles%\PowerShell\7\pwsh.exe" %*
 ' | Set-Content $shim -Encoding ASCII
-    Write-Host "[+] Created shim: powershell.cmd -> pwsh.exe" -ForegroundColor Green
+        Write-Host "[+] Created shim: powershell.cmd -> pwsh.exe" -ForegroundColor Green
+    } else {
+        Write-Host "[=] powershell.cmd shim already exists." -ForegroundColor DarkGray
+    }
+
+    # Ensure PowerShell 7 directory is in Machine PATH
+    try {
+        $targetScope = 'Machine'
+        $current = [Environment]::GetEnvironmentVariable('Path', $targetScope)
+        if ($current -and $current -match [Regex]::Escape($pwshDir)) {
+            Write-Host "[=] $pwshDir already in Machine PATH." -ForegroundColor DarkGray
+        } else {
+            $sep = if ([string]::IsNullOrEmpty($current) -or $current.TrimEnd().EndsWith(';')) { '' } else { ';' }
+            [Environment]::SetEnvironmentVariable('Path', "$current$sep$pwshDir", $targetScope)
+            Write-Host "[+] Added $pwshDir to Machine PATH." -ForegroundColor Green
+        }
+
+        # Refresh PATH for current session
+        $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+        $userPath    = [Environment]::GetEnvironmentVariable('Path','User')
+        $env:Path    = "$machinePath;$userPath"
+    } catch {
+        Write-Warning "Failed to update Machine PATH for PowerShell 7: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warning "PowerShell 7 directory not found at $pwshDir; skipping shim + PATH update."
 }
 
-# Ensure PowerShell 7 directory is first in PATH
-Add-Path -NewPath "$env:ProgramFiles\PowerShell\7" -Scope Machine
-
+# -----------------------------
+#  Windows Terminal autostart
+# -----------------------------
 
 Write-Host "[*] Adding Windows Terminal autostart..." -ForegroundColor Cyan
 
@@ -338,7 +375,6 @@ if ($wt) {
 } else {
     Write-Warning "wt.exe not found — skipping autostart registration."
 }
-
 
 # -----------------------------
 #  Default App Associations via SetUserFTA
@@ -393,20 +429,20 @@ $ObsidianProgId = "Obsidian.md"
 }
 
 # Adobe for PDFs
-Invoke-SetUserFTA ".pdf"   $AdobePdfProgId
+Invoke-SetUserFTA ".pdf"    $AdobePdfProgId
 
 # Wireshark for captures
-Invoke-SetUserFTA ".pcap"  $WiresharkProgId
+Invoke-SetUserFTA ".pcap"   $WiresharkProgId
 Invoke-SetUserFTA ".pcapng" $WiresharkProgId
 
 # Chrome as default browser
-Invoke-SetUserFTA "http"   $ChromeProgId
-Invoke-SetUserFTA "https"  $ChromeProgId
-Invoke-SetUserFTA ".htm"   $ChromeProgId
-Invoke-SetUserFTA ".html"  $ChromeProgId
+Invoke-SetUserFTA "http"    $ChromeProgId
+Invoke-SetUserFTA "https"   $ChromeProgId
+Invoke-SetUserFTA ".htm"    $ChromeProgId
+Invoke-SetUserFTA ".html"   $ChromeProgId
 
 # Obsidian for markdown
-Invoke-SetUserFTA ".md"    $ObsidianProgId
+Invoke-SetUserFTA ".md"     $ObsidianProgId
 
 # -----------------------------
 #  Privacy / Telemetry / Search / Lock Screen
@@ -950,7 +986,7 @@ function Prompt {
     $promptColor = ""
 
     if ($useColor -and $Flavor) {
-        $reset      = $PSStyle.Reset
+        $reset       = $PSStyle.Reset
         $timeColor   = $Flavor.Teal.Foreground()
         $pathColor   = $Flavor.Yellow.Foreground()
         $promptColor = $Flavor.Green.Foreground()
@@ -985,7 +1021,6 @@ function Prompt {
 Set-Content -Path $profilePath -Value $profileContent -Encoding UTF8
 Write-Host "[+] Updated profile at $profilePath" -ForegroundColor Green
 
-
 # -----------------------------
 #  Windows Terminal Catppuccin Mocha (best-effort)
 # -----------------------------
@@ -1009,21 +1044,31 @@ try {
 
         $mocha = Get-Content $mochaPath -Raw | ConvertFrom-Json
 
-        # Merge schemes
-        if (-not $settingsJson.schemes) { $settingsJson | Add-Member -MemberType NoteProperty -Name schemes -Value @() }
+        # Ensure schemes property exists
+        if (-not ($settingsJson.PSObject.Properties.Name -contains 'schemes')) {
+            $settingsJson | Add-Member -MemberType NoteProperty -Name schemes -Value @()
+        }
+
+        # Replace or add Mocha scheme
         $existing = $settingsJson.schemes | Where-Object { $_.name -eq $mocha.name }
         if ($existing) {
-            # replace
             $settingsJson.schemes = @($settingsJson.schemes | Where-Object { $_.name -ne $mocha.name }) + $mocha
         } else {
             $settingsJson.schemes += $mocha
         }
 
-        # Set default profile's colorScheme if it's a PowerShell profile
+        # Set colorScheme on PowerShell-like profiles
         if ($settingsJson.profiles -and $settingsJson.profiles.list) {
             foreach ($p in $settingsJson.profiles.list) {
-                if ($p.commandline -like "*pwsh*" -or $p.name -like "*PowerShell*") {
-                    $p.colorScheme = $mocha.name
+                if (-not $p) { continue }
+                $hasCmd = $p.PSObject.Properties.Name -contains 'commandline'
+                $hasName = $p.PSObject.Properties.Name -contains 'name'
+                if (($hasCmd -and $p.commandline -like "*pwsh*") -or ($hasName -and $p.name -like "*PowerShell*")) {
+                    if ($p.PSObject.Properties.Name -contains 'colorScheme') {
+                        $p.colorScheme = $mocha.name
+                    } else {
+                        $p | Add-Member -NotePropertyName colorScheme -NotePropertyValue $mocha.name
+                    }
                 }
             }
         }
@@ -1219,17 +1264,37 @@ try {
             if ($gj.Trim()) { $globalCfg = $gj | ConvertFrom-Json }
         } catch { }
     }
+
     if (-not $globalCfg.vaults) {
         $globalCfg.vaults = @{}
     }
-    # generate id
-    $vaultId = [Guid]::NewGuid().ToString("N")
-    $globalCfg.vaults.Clear()
-    $globalCfg.vaults.$vaultId = @{
-        path = $vaultPath
-        ts   = [int64]([DateTimeOffset]::Now.ToUnixTimeMilliseconds())
-        open = $true
+
+    # Look for an existing vault pointing at this path
+    $existingKey = $null
+    if ($globalCfg.vaults -is [System.Management.Automation.PSCustomObject]) {
+        foreach ($prop in $globalCfg.vaults.PSObject.Properties) {
+            if ($prop.Value -and $prop.Value.path -eq $vaultPath) {
+                $existingKey = $prop.Name
+                break
+            }
+        }
     }
+
+    $nowTs = [int64]([DateTimeOffset]::Now.ToUnixTimeMilliseconds())
+
+    if ($existingKey) {
+        $globalCfg.vaults.$existingKey.path = $vaultPath
+        $globalCfg.vaults.$existingKey.ts   = $nowTs
+        $globalCfg.vaults.$existingKey.open = $true
+    } else {
+        $vaultId = [Guid]::NewGuid().ToString("N")
+        $globalCfg.vaults.$vaultId = @{
+            path = $vaultPath
+            ts   = $nowTs
+            open = $true
+        }
+    }
+
     $globalCfg | ConvertTo-Json -Depth 20 | Set-Content -Path $globalConfigFile -Encoding UTF8
     Write-Host "[+] Obsidian vault configured as default." -ForegroundColor Green
 
@@ -1277,9 +1342,9 @@ function Ensure-WSLAndUbuntu {
         }
     }
 
-    # Install Ubuntu if missing
+    # Install Ubuntu if missing (treat any "Ubuntu*" as present)
     $distros = wsl --list --quiet 2>$null
-    if (-not ($distros -match "^Ubuntu$")) {
+    if (-not ($distros -match "^Ubuntu")) {
         Write-Host "[*] Installing Ubuntu in WSL..." -ForegroundColor Yellow
         wsl --install -d Ubuntu
         Write-Host "[!] Ubuntu installation may require a reboot or first-run initialization. Re-run this script after that if needed." -ForegroundColor Yellow

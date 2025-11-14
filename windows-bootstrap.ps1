@@ -331,7 +331,8 @@ function Set-RegistryDwordIfNeeded {
         [string]$Description
     )
 
-    $regPath = Join-Path "$Hive:\" $Path
+    $base = "$Hive" + ':\'
+    $regPath = Join-Path $base $Path
     $current = $null
     try {
         $current = (Get-ItemProperty -Path $regPath -Name $Name -ErrorAction SilentlyContinue).$Name
@@ -614,7 +615,7 @@ if (-not $cert) {
 $certThumb = $cert.Thumbprint
 
 # Profile content
-$profileContent = @"
+$profileContent = @'
 # ================================
 #  Custom Bootstrap Profile
 # ================================
@@ -626,10 +627,10 @@ Import-Module posh-git -ErrorAction SilentlyContinue
 Import-Module PSFzf -ErrorAction SilentlyContinue
 
 # Import Catppuccin (if available) and set Mocha flavor
-Try {
+try {
     Import-Module Catppuccin -ErrorAction Stop
-    \$Flavor = \$Catppuccin['Mocha']
-} Catch { }
+    $Flavor = $Catppuccin['Mocha']
+} catch { }
 
 # Use real GNU grep instead of Select-String alias if available
 if (Get-Command grep.exe -ErrorAction SilentlyContinue) {
@@ -651,148 +652,145 @@ function cd.. {
 
 function explore {
     param(
-        [string]\$Path
+        [string]$Path
     )
-    if ([string]::IsNullOrWhiteSpace(\$Path)) {
-        \$target = (Get-Location).Path
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $target = (Get-Location).Path
     } else {
         try {
-            \$resolved = Resolve-Path -LiteralPath \$Path -ErrorAction Stop
-            \$target = \$resolved.Path
+            $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
+            $target = $resolved.Path
         } catch {
-            Write-Warning "Path not found: \$Path"
+            Write-Warning "Path not found: $Path"
             return
         }
     }
-    Start-Process explorer.exe -ArgumentList \$target
+    Start-Process explorer.exe -ArgumentList $target
 }
 
 function pkill {
     param(
-        [Parameter(Mandatory)][string]\$procName
+        [Parameter(Mandatory)][string]$procName
     )
     try {
-        taskkill /f /im \$procName 2>\$null
+        taskkill /f /im $procName 2>$null
     } catch {
-        Write-Warning "Failed to kill process \$procName: \$($_.Exception.Message)"
+        Write-Warning "Failed to kill process $procName: $($_.Exception.Message)"
     }
 }
 
 function Clear-And-Banner {
-    \$banner = @"
+    $banner = @"
   _____ __                           ____ __         ____
  / ___// /_ ____ ________  ____     / __// /_  ___  / / /
- \__ \/ __/ __  / __  __ \/ __ \    \__ \/ __ \/ _ \/ / / 
- __/ / /_/ /_/ / / / / / / /_/ /   __/ / / / /  __/ / /  
-/___/\__/\__,_/_/ /_/ /_/ .___/   /___/_/ /_/\___/_/_/   
-                       /_/                                
+ \__ \/ __/ __  / __  __ \/ __ \    \__ \/ __ \/ _ \/ / /
+ __/ / /_/ /_/ / / / / / / /_/ /   __/ / / / /  __/ / /
+/___/\__/\__,_/_/ /_/ /_/ .___/   /___/_/ /_/\___/_/_/
+                       /_/
 "@
 
     function Get-PrimaryIPv4 {
         try {
-            \$defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction Stop |
-                             Sort-Object -Property RouteMetric, InterfaceMetric |
-                             Select-Object -First 1
-            if (\$defaultRoute) {
-                \$ifIndex = \$defaultRoute.InterfaceIndex
-                \$ip = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex \$ifIndex -ErrorAction Stop |
-                      Where-Object { \$_.IPAddress -notlike "169.254.*" } |
-                      Select-Object -First 1 -ExpandProperty IPAddress
-                return \$ip
+            $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction Stop |
+                            Sort-Object -Property RouteMetric, InterfaceMetric |
+                            Select-Object -First 1
+            if ($defaultRoute) {
+                $ifIndex = $defaultRoute.InterfaceIndex
+                $ip = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $ifIndex -ErrorAction Stop |
+                     Where-Object { $_.IPAddress -notlike "169.254.*" } |
+                     Select-Object -First 1 -ExpandProperty IPAddress
+                return $ip
             }
         } catch { }
         try {
-            \$ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
-                  Where-Object { \$_.IPAddress -notlike "169.254.*" } |
+            $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+                  Where-Object { $_.IPAddress -notlike "169.254.*" } |
                   Select-Object -First 1 -ExpandProperty IPAddress
-            return \$ip
+            return $ip
         } catch { }
-        return \$null
+        return $null
     }
 
-    \$ip = Get-PrimaryIPv4
-    \$ipStr = "IPv4 addr: " + (\$ip ? \$ip : "(none)")
+    $ip = Get-PrimaryIPv4
+    $ipStr = "IPv4 addr: " + ($ip ? $ip : "(none)")
 
-    \$pubStr = "Public IP: (unavailable)"
+    $pubStr = "Public IP: (unavailable)"
     try {
-        \$resp = Invoke-WebRequest "https://ifconfig.me/ip" -UseBasicParsing -TimeoutSec 3
-        if (\$resp -and \$resp.Content) {
-            \$pubStr = "Public IP: " + \$resp.Content.Trim()
+        $resp = Invoke-WebRequest "https://ifconfig.me/ip" -UseBasicParsing -TimeoutSec 3
+        if ($resp -and $resp.Content) {
+            $pubStr = "Public IP: " + $resp.Content.Trim()
         }
     } catch { }
 
-    \$hn = \$env:COMPUTERNAME
-    \$hnStr = "HN: \$hn"
+    $hn = $env:COMPUTERNAME
+    $hnStr = "HN: $hn"
 
     Clear-Host
-    Write-Output \$banner
+    Write-Output $banner
     Get-Date
-    Write-Output \$hnStr
-    Write-Output \$ipStr
-    Write-Host \$pubStr -NoNewline
+    Write-Output $hnStr
+    Write-Output $ipStr
+    Write-Host $pubStr -NoNewline
 }
 
 function Add-Path {
     param(
-        [Parameter(Mandatory)][string]\$NewPath,
-        [ValidateSet('User','Machine')][string]\$Scope = 'Machine'
+        [Parameter(Mandatory)][string]$NewPath,
+        [ValidateSet('User','Machine')][string]$Scope = 'Machine'
     )
-    if (-not (Test-Path \$NewPath)) {
-        Write-Warning "Path does not exist: \$NewPath"
+    if (-not (Test-Path $NewPath)) {
+        Write-Warning "Path does not exist: $NewPath"
         return
     }
 
-    \$targetScope = \$Scope
+    $targetScope = $Scope
     try {
-        \$current = [Environment]::GetEnvironmentVariable('Path', \$targetScope)
+        $current = [Environment]::GetEnvironmentVariable('Path', $targetScope)
     } catch {
-        Write-Warning "Failed to read \$targetScope PATH, falling back to User."
-        \$targetScope = 'User'
-        \$current = [Environment]::GetEnvironmentVariable('Path', \$targetScope)
+        Write-Warning "Failed to read $targetScope PATH, falling back to User."
+        $targetScope = 'User'
+        $current = [Environment]::GetEnvironmentVariable('Path', $targetScope)
     }
 
-    if (\$current -and \$current -match [Regex]::Escape(\$NewPath)) {
-        Write-Host "[=] \$NewPath already in \$targetScope PATH."
+    if ($current -and $current -match [Regex]::Escape($NewPath)) {
+        Write-Host "[=] $NewPath already in $targetScope PATH."
     } else {
-        \$sep = if ([string]::IsNullOrEmpty(\$current) -or \$current.TrimEnd().EndsWith(';')) { '' } else { ';' }
-        [Environment]::SetEnvironmentVariable('Path', "\$current\$sep\$NewPath", \$targetScope)
-        Write-Host "[+] Added \$NewPath to \$targetScope PATH."
+        $sep = if ([string]::IsNullOrEmpty($current) -or $current.TrimEnd().EndsWith(';')) { '' } else { ';' }
+        [Environment]::SetEnvironmentVariable('Path', "$current$sep$NewPath", $targetScope)
+        Write-Host "[+] Added $NewPath to $targetScope PATH."
     }
 
     # Refresh current session PATH
-    \$machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
-    \$userPath    = [Environment]::GetEnvironmentVariable('Path','User')
-    \$env:Path    = "\$machinePath;\$userPath"
+    $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+    $userPath    = [Environment]::GetEnvironmentVariable('Path','User')
+    $env:Path    = "$machinePath;$userPath"
 }
 
 function sign {
     param(
-        [Parameter(Mandatory)][string]\$FilePath
+        [Parameter(Mandatory)][string]$FilePath
     )
-    \$resolved = Resolve-Path -LiteralPath \$FilePath -ErrorAction SilentlyContinue
-    if (-not \$resolved) {
-        Write-Error "File not found: \$FilePath"
+    $resolved = Resolve-Path -LiteralPath $FilePath -ErrorAction SilentlyContinue
+    if (-not $resolved) {
+        Write-Error "File not found: $FilePath"
         return
     }
 
-    \$CertThumbprint = '$certThumb'
+    $CertSubject = "CN=Script Signing - $env:USERNAME"
+    $Certificate = Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert |
+                   Where-Object { $_.Subject -eq $CertSubject } |
+                   Select-Object -First 1
 
-    if (-not \$CertThumbprint) {
-        Write-Error "No script signing certificate thumbprint configured."
-        return
-    }
-
-    \$Certificate = Get-Item "Cert:\CurrentUser\My\\\$CertThumbprint" -ErrorAction SilentlyContinue
-    if (-not \$Certificate) {
-        Write-Error "Certificate not found with thumbprint: \$CertThumbprint"
+    if (-not $Certificate) {
+        Write-Error "Script signing certificate not found for subject: $CertSubject"
         return
     }
 
     try {
-        Set-AuthenticodeSignature -FilePath \$resolved.Path -Certificate \$Certificate | Out-Null
-        Write-Host "[+] Signed \$($resolved.Path) with certificate \$CertThumbprint" -ForegroundColor Green
+        Set-AuthenticodeSignature -FilePath $resolved.Path -Certificate $Certificate | Out-Null
+        Write-Host "[+] Signed $($resolved.Path) with certificate subject $CertSubject" -ForegroundColor Green
     } catch {
-        Write-Error "Failed to sign file: \$($_.Exception.Message)"
+        Write-Error "Failed to sign file: $($_.Exception.Message)"
     }
 }
 
@@ -827,49 +825,48 @@ function Show-ProfileHelp {
 
 Set-Alias -Name profile-help -Value Show-ProfileHelp -ErrorAction SilentlyContinue
 
-# Prompt using Catppuccin colors & last command end time if possible
 function Prompt {
-    \$timeText = ""
-    \$hist = Get-History -ErrorAction SilentlyContinue | Select-Object -Last 1
-    if (\$hist -and \$hist.EndExecutionTime) {
-        \$timeText = \$hist.EndExecutionTime.ToString("HH:mm:ss")
+    $timeText = ""
+    $hist = Get-History -ErrorAction SilentlyContinue | Select-Object -Last 1
+    if ($hist -and $hist.EndExecutionTime) {
+        $timeText = $hist.EndExecutionTime.ToString("HH:mm:ss")
     } else {
-        \$timeText = (Get-Date).ToString("HH:mm:ss")
+        $timeText = (Get-Date).ToString("HH:mm:ss")
     }
 
-    \$path = (Get-Location).Path
+    $path = (Get-Location).Path
 
-    \$reset = "`e[0m"
-    if (\$PSStyle) { \$reset = \$PSStyle.Reset }
+    $reset = "`e[0m"
+    if ($PSStyle) { $reset = $PSStyle.Reset }
 
-    \$timeColor = ""
-    \$pathColor = ""
-    \$promptColor = ""
+    $timeColor = ""
+    $pathColor = ""
+    $promptColor = ""
 
-    if (\$Flavor) {
-        \$timeColor   = \$Flavor.Teal.Foreground()
-        \$pathColor   = \$Flavor.Yellow.Foreground()
-        \$promptColor = \$Flavor.Green.Foreground()
+    if ($Flavor) {
+        $timeColor   = $Flavor.Teal.Foreground()
+        $pathColor   = $Flavor.Yellow.Foreground()
+        $promptColor = $Flavor.Green.Foreground()
     }
 
     Write-Host "[" -NoNewline
-    if (\$timeColor) { Write-Host "\$timeColor\$timeText$reset" -NoNewline }
-    else { Write-Host "\$timeText" -NoNewline }
+    if ($timeColor) { Write-Host "$timeColor$timeText$reset" -NoNewline }
+    else { Write-Host "$timeText" -NoNewline }
     Write-Host "] " -NoNewline
 
-    if (\$pathColor) { Write-Host "\$pathColor\$path$reset" -NoNewline }
-    else { Write-Host "\$path" -NoNewline }
+    if ($pathColor) { Write-Host "$pathColor$path$reset" -NoNewline }
+    else { Write-Host "$path" -NoNewline }
 
-    if (\$promptColor) { Write-Host " \$promptColor> $reset" -NoNewline }
+    if ($promptColor) { Write-Host " $promptColor> $reset" -NoNewline }
     else { Write-Host " > " -NoNewline }
 
     return " "
 }
-
-"@
+'@
 
 Set-Content -Path $profilePath -Value $profileContent -Encoding UTF8
 Write-Host "[+] Updated profile at $profilePath" -ForegroundColor Green
+
 
 # -----------------------------
 #  Windows Terminal Catppuccin Mocha (best-effort)

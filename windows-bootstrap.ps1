@@ -650,24 +650,83 @@ function Get-AppsFolderItem {
 
 function Pin-AppToTaskbar {
     param(
-        [Parameter(Mandatory)][string]$AppName
+        [Parameter(Mandatory)][string]$AppName,
+        [string]$StartMenuPattern
     )
+
+    $shell = New-Object -ComObject Shell.Application
+
+    # ----------------------------
+    # First try shell:AppsFolder
+    # ----------------------------
     try {
         $item = Get-AppsFolderItem -AppIdOrName $AppName
-        if (-not $item) {
-            Write-Warning "AppsFolder item not found for $AppName, skipping pin."
-            return
-        }
-        $verb = $item.Verbs() | Where-Object { $_.Name.Replace('&','') -match 'Pin to taskbar' }
-        if ($verb) {
-            $verb.DoIt()
-            Write-Host "[+] Pinned $AppName to taskbar." -ForegroundColor Green
+        if ($item) {
+            $verb = $item.Verbs() | Where-Object {
+                $n = $_.Name.Replace('&','')
+                $n -match '(?i)taskbar'
+            }
+
+            if ($verb) {
+                $verb.DoIt()
+                Write-Host "[+] Pinned $AppName to taskbar via AppsFolder." -ForegroundColor Green
+                return
+            } else {
+                Write-Host "[=] 'Pin to taskbar' verb not available for $AppName in AppsFolder; trying Start Menu fallback..." -ForegroundColor DarkGray
+            }
         } else {
-            Write-Warning "PinToTaskbar verb not found for $AppName."
+            Write-Host "[=] AppsFolder item not found for $AppName; trying Start Menu fallback..." -ForegroundColor DarkGray
         }
     } catch {
-        Write-Warning "Failed to pin ${AppName}: $($_.Exception.Message)"
+        Write-Host "[=] AppsFolder pin attempt for $AppName failed; trying Start Menu fallback..." -ForegroundColor DarkGray
     }
+
+    # ----------------------------
+    # Fallback: search Start Menu .lnk
+    # ----------------------------
+    if (-not $StartMenuPattern) {
+        # Default pattern if nothing specified
+        $StartMenuPattern = "*$AppName*.lnk"
+    }
+
+    $startRoots = @(
+        "$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
+        "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+    ) | Where-Object { Test-Path $_ }
+
+    foreach ($root in $startRoots) {
+        try {
+            $lnk = Get-ChildItem -Path $root -Filter "*.lnk" -Recurse -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -like $StartMenuPattern } |
+                   Select-Object -First 1
+
+            if (-not $lnk) { continue }
+
+            $folderPath = Split-Path $lnk.FullName
+            $fileName   = Split-Path $lnk.FullName -Leaf
+
+            $folderObj  = $shell.NameSpace($folderPath)
+            if (-not $folderObj) { continue }
+
+            $item2 = $folderObj.ParseName($fileName)
+            if (-not $item2) { continue }
+
+            $verb2 = $item2.Verbs() | Where-Object {
+                $n = $_.Name.Replace('&','')
+                $n -match '(?i)taskbar'
+            }
+
+            if ($verb2) {
+                $verb2.DoIt()
+                Write-Host "[+] Pinned $AppName to taskbar via Start Menu shortcut ($($lnk.Name))." -ForegroundColor Green
+                return
+            }
+        } catch {
+            # just try next root
+        }
+    }
+
+    Write-Host "[=] Could not pin $AppName to taskbar on this Windows build; skipping." -ForegroundColor DarkGray
 }
 
 function Unpin-AppFromTaskbar {
@@ -703,21 +762,19 @@ if ($OS.IsClient) {
 
     # Desired order after Explorer:
     # Windows Terminal, Sublime, VSCode, Obsidian, Firefox, Chrome
-
-    # Best-effort unpin & re-pin in order
     $PinOrder = @(
-        "Windows Terminal",
-        "Sublime Text",
-        "Visual Studio Code",
-        "Obsidian",
-        "Mozilla Firefox",
-        "Google Chrome"
+        @{ Name = "Windows Terminal";    Pattern = "*Windows Terminal*.lnk" },
+        @{ Name = "Sublime Text";        Pattern = "*Sublime Text*.lnk" },
+        @{ Name = "Visual Studio Code";  Pattern = "*Visual Studio Code*.lnk" },
+        @{ Name = "Obsidian";            Pattern = "*Obsidian*.lnk" },
+        @{ Name = "Mozilla Firefox";     Pattern = "*Firefox*.lnk" },
+        @{ Name = "Google Chrome";       Pattern = "*Chrome*.lnk" }
     )
 
-    foreach ($name in $PinOrder) {
-        Unpin-AppFromTaskbar -AppName $name
+    foreach ($app in $PinOrder) {
+        Unpin-AppFromTaskbar -AppName $app.Name
         Start-Sleep -Milliseconds 200
-        Pin-AppToTaskbar -AppName $name
+        Pin-AppToTaskbar -AppName $app.Name -StartMenuPattern $app.Pattern
         Start-Sleep -Milliseconds 200
     }
 } else {

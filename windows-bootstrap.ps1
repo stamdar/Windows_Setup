@@ -1560,8 +1560,6 @@ pipx install pwntools || true
     Write-Host "[+] Ubuntu provisioning complete (best effort)." -ForegroundColor Green
 }
 
-Ensure-WSLAndUbuntu
-
 # --- Timing: compute script duration ---
 $ScriptEndTime = Get-Date
 $Duration      = $ScriptEndTime - $ScriptStartTime
@@ -1586,7 +1584,7 @@ if ($null -ne $InitialFreeGB -and $null -ne $FinalFreeGB) {
 # --- Script Completion prompt ---
 Write-Host ""
 Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
-Write-Host " Bootstrap Complete" -ForegroundColor Cyan
+Write-Host " Bootstrap Nearly Complete" -ForegroundColor Cyan
 Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
 Write-Host " Disk space consumed by installed packages: $DiskUsedGB GB" -ForegroundColor Green
 Write-Host " Total runtime: $DurationHHMM  (~$DurationMin min, $DurationSec sec)" -ForegroundColor Green
@@ -1594,3 +1592,7 @@ Write-Host "--------------------------------------------------------" -Foregroun
 Write-Host ""
 Write-Host "Open a NEW PowerShell window to load the updated profile." -ForegroundColor Yellow
 Write-Host ""
+Write-Host "Starting WSL installation. A reboot will be required."
+Write-Host ""
+
+Ensure-WSLAndUbuntu

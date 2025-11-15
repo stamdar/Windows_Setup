@@ -730,15 +730,24 @@ if ($OS.IsClient) {
 
 Write-Host "[*] Installing core PowerShell modules..." -ForegroundColor Cyan
 
-# Make sure NuGet provider / PSGallery are available
 try {
     # Ensure TLS 1.2 so NuGet download doesn't choke on older defaults
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-    $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+    # IMPORTANT: use -ListAvailable so this does NOT bootstrap / prompt
+    $nuget = Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue
+
     if (-not $nuget) {
         Write-Host "[*] Installing NuGet package provider..." -ForegroundColor Yellow
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -Confirm:$false | Out-Null
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 `
+            -Force -Confirm:$false | Out-Null
+
+        # Re-check without bootstrapping
+        $nuget = Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue
+    }
+
+    if (-not $nuget) {
+        Write-Warning "NuGet provider still not available; some Install-Module calls may fail."
     }
 
     # Trust PSGallery so Install-Module doesn't prompt

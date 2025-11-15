@@ -18,6 +18,9 @@ param(
     [switch]$SkipTheming
 )
 
+# --- Timing: record script start ---
+$ScriptStartTime = Get-Date
+
 # -----------------------------
 #  Elevation / Admin Check
 # -----------------------------
@@ -74,6 +77,19 @@ function Get-OSInfo {
 
 $OS = Get-OSInfo
 Write-Host "[*] Detected OS: $($OS.Caption) ($($OS.Version))" -ForegroundColor Cyan
+
+function Get-SystemDriveFreeGB {
+    # Adjust "C:" if you want a different/system drive
+    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+    if (-not $disk) { return $null }
+
+    # Return free space in GiB with a couple decimals
+    return [math]::Round($disk.FreeSpace / 1GB, 2)
+}
+
+# Snapshot free space at start (before we install stuff)
+$InitialFreeGB = Get-SystemDriveFreeGB
+Write-Host "[*] Initial free space on C:: $InitialFreeGB GB" -ForegroundColor Cyan
 
 # -----------------------------
 #  OneDrive Disable (early, idempotent)
@@ -1546,4 +1562,35 @@ pipx install pwntools || true
 
 Ensure-WSLAndUbuntu
 
-Write-Host "`n[+] Bootstrap script completed. Open a new PowerShell session to enjoy your profile changes." -ForegroundColor Green
+# --- Timing: compute script duration ---
+$ScriptEndTime = Get-Date
+$Duration      = $ScriptEndTime - $ScriptStartTime
+
+$DurationHHMM = '{0:hh\:mm\:ss}' -f $Duration
+$DurationMin  = [math]::Round($Duration.TotalMinutes, 1)
+$DurationSec  = [math]::Round($Duration.TotalSeconds)
+
+# --- Disk usage delta ---
+$FinalFreeGB = Get-SystemDriveFreeGB
+if ($null -ne $InitialFreeGB -and $null -ne $FinalFreeGB) {
+    $DiskUsedGBRaw = $InitialFreeGB - $FinalFreeGB
+
+    # If for some reason free space increased (cleanup, debloat), don't show a negative number
+    if ($DiskUsedGBRaw -lt 0) { $DiskUsedGBRaw = 0 }
+
+    $DiskUsedGB = [math]::Round($DiskUsedGBRaw, 2)
+} else {
+    $DiskUsedGB = "N/A"
+}
+
+# --- Script Completion prompt ---
+Write-Host ""
+Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
+Write-Host " Bootstrap Complete" -ForegroundColor Cyan
+Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
+Write-Host " Disk space consumed by installed packages: $DiskUsedGB GB" -ForegroundColor Green
+Write-Host " Total runtime: $DurationHHMM  (~$DurationMin min, $DurationSec sec)" -ForegroundColor Green
+Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Open a NEW PowerShell window to load the updated profile." -ForegroundColor Yellow
+Write-Host ""

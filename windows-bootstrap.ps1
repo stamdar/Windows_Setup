@@ -13,8 +13,9 @@ Windows Workstation Bootstrap Script
 #>
 
 param(
-    [switch]$SkipDebloat
-    [switch]$SkipPackages
+    [switch]$SkipDebloat,
+    [switch]$SkipPackages,
+    [switch]$SkipTheming
 )
 
 # -----------------------------
@@ -1093,289 +1094,298 @@ function Prompt {
 Set-Content -Path $profilePath -Value $profileContent -Encoding UTF8
 Write-Host "[+] Updated profile at $profilePath" -ForegroundColor Green
 
-# -----------------------------
-#  Windows Terminal Catppuccin Mocha (best-effort)
-# -----------------------------
+# =============================
+#  Theming (SkipTheming-aware)
+# =============================
 
-Write-Host "[*] Attempting to configure Windows Terminal with Catppuccin Mocha..." -ForegroundColor Cyan
-try {
-    $wtSettingsRoot = Join-Path $env:LOCALAPPDATA "Packages"
-    $wtSettingsPath = Get-ChildItem $wtSettingsRoot -Recurse -Filter "settings.json" -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -like "*Microsoft.WindowsTerminal_*" } |
-        Select-Object -First 1 -ExpandProperty FullName
+if ($SkipTheming) {
+    Write-Host "[*] SkipTheming specified — skipping Windows Terminal, VS Code, Sublime, and Obsidian theming." -ForegroundColor Yellow
+} else {
 
-    if ($wtSettingsPath) {
-        $settingsJson = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
+    # -----------------------------
+    #  Windows Terminal Catppuccin Mocha (best-effort)
+    # -----------------------------
 
-        # Download Mocha scheme from Catppuccin/windows-terminal
-        $tempDir = Join-Path $env:TEMP "Catppuccin-WT"
-        if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
-        $mochaUrl = "https://raw.githubusercontent.com/catppuccin/windows-terminal/main/mocha.json"
-        $mochaPath = Join-Path $tempDir "mocha.json"
-        Invoke-WebRequest -Uri $mochaUrl -OutFile $mochaPath -UseBasicParsing
+    Write-Host "[*] Attempting to configure Windows Terminal with Catppuccin Mocha..." -ForegroundColor Cyan
+    try {
+        $wtSettingsRoot = Join-Path $env:LOCALAPPDATA "Packages"
+        $wtSettingsPath = Get-ChildItem $wtSettingsRoot -Recurse -Filter "settings.json" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*Microsoft.WindowsTerminal_*" } |
+            Select-Object -First 1 -ExpandProperty FullName
 
-        $mocha = Get-Content $mochaPath -Raw | ConvertFrom-Json
+        if ($wtSettingsPath) {
+            $settingsJson = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
 
-        # Ensure schemes property exists
-        if (-not ($settingsJson.PSObject.Properties.Name -contains 'schemes')) {
-            $settingsJson | Add-Member -MemberType NoteProperty -Name schemes -Value @()
-        }
+            # Download Mocha scheme from Catppuccin/windows-terminal
+            $tempDir = Join-Path $env:TEMP "Catppuccin-WT"
+            if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
+            $mochaUrl = "https://raw.githubusercontent.com/catppuccin/windows-terminal/main/mocha.json"
+            $mochaPath = Join-Path $tempDir "mocha.json"
+            Invoke-WebRequest -Uri $mochaUrl -OutFile $mochaPath -UseBasicParsing
 
-        # Replace or add Mocha scheme
-        $existing = $settingsJson.schemes | Where-Object { $_.name -eq $mocha.name }
-        if ($existing) {
-            $settingsJson.schemes = @($settingsJson.schemes | Where-Object { $_.name -ne $mocha.name }) + $mocha
-        } else {
-            $settingsJson.schemes += $mocha
-        }
+            $mocha = Get-Content $mochaPath -Raw | ConvertFrom-Json
 
-        # Set colorScheme on PowerShell-like profiles
-        if ($settingsJson.profiles -and $settingsJson.profiles.list) {
-            foreach ($p in $settingsJson.profiles.list) {
-                if (-not $p) { continue }
-                $hasCmd = $p.PSObject.Properties.Name -contains 'commandline'
-                $hasName = $p.PSObject.Properties.Name -contains 'name'
-                if (($hasCmd -and $p.commandline -like "*pwsh*") -or ($hasName -and $p.name -like "*PowerShell*")) {
-                    if ($p.PSObject.Properties.Name -contains 'colorScheme') {
-                        $p.colorScheme = $mocha.name
-                    } else {
-                        $p | Add-Member -NotePropertyName colorScheme -NotePropertyValue $mocha.name
+            # Ensure schemes property exists
+            if (-not ($settingsJson.PSObject.Properties.Name -contains 'schemes')) {
+                $settingsJson | Add-Member -MemberType NoteProperty -Name schemes -Value @()
+            }
+
+            # Replace or add Mocha scheme
+            $existing = $settingsJson.schemes | Where-Object { $_.name -eq $mocha.name }
+            if ($existing) {
+                $settingsJson.schemes = @($settingsJson.schemes | Where-Object { $_.name -ne $mocha.name }) + $mocha
+            } else {
+                $settingsJson.schemes += $mocha
+            }
+
+            # Set colorScheme on PowerShell-like profiles
+            if ($settingsJson.profiles -and $settingsJson.profiles.list) {
+                foreach ($p in $settingsJson.profiles.list) {
+                    if (-not $p) { continue }
+                    $hasCmd = $p.PSObject.Properties.Name -contains 'commandline'
+                    $hasName = $p.PSObject.Properties.Name -contains 'name'
+                    if (($hasCmd -and $p.commandline -like "*pwsh*") -or ($hasName -and $p.name -like "*PowerShell*")) {
+                        if ($p.PSObject.Properties.Name -contains 'colorScheme') {
+                            $p.colorScheme = $mocha.name
+                        } else {
+                            $p | Add-Member -NotePropertyName colorScheme -NotePropertyValue $mocha.name
+                        }
                     }
                 }
             }
-        }
 
-        $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $wtSettingsPath -Encoding UTF8
-        Write-Host "[+] Windows Terminal Catppuccin Mocha scheme applied." -ForegroundColor Green
-    } else {
-        Write-Warning "Windows Terminal settings.json not found; skipping WT theme."
-    }
-} catch {
-    Write-Warning "Failed to configure Windows Terminal theme: $($_.Exception.Message)"
-}
-
-# -----------------------------
-#  VS Code Catppuccin Mocha
-# -----------------------------
-
-Write-Host "[*] Configuring VS Code Catppuccin Mocha theme..." -ForegroundColor Cyan
-try {
-    $codeCmd = Get-Command code -ErrorAction SilentlyContinue
-    if ($codeCmd) {
-        code --install-extension Catppuccin.catppuccin-vsc --force 2>$null
-        code --install-extension Catppuccin.catppuccin-vsc-icons --force 2>$null
-        Write-Host "[+] Catppuccin VS Code theme and icons installed." -ForegroundColor Green
-
-        $settingsDir = Join-Path $env:APPDATA "Code\User"
-        $settingsFile = Join-Path $settingsDir "settings.json"
-        if (-not (Test-Path $settingsDir)) {
-            New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
-        }
-        $settings = @{}
-        if (Test-Path $settingsFile) {
-            try {
-                $json = Get-Content $settingsFile -Raw
-                if ($json.Trim()) {
-                    $settings = $json | ConvertFrom-Json
-                }
-            } catch { }
-        }
-
-        $settings."workbench.colorTheme" = "Catppuccin Mocha"
-        $settings."workbench.iconTheme" = "Catppuccin Icons Macchiato"
-
-        $settings | ConvertTo-Json -Depth 20 | Set-Content -Path $settingsFile -Encoding UTF8
-        Write-Host "[+] VS Code configured to use Catppuccin Mocha." -ForegroundColor Green
-    } else {
-        Write-Warning "code.exe not found; skipping VS Code theme config."
-    }
-} catch {
-    Write-Warning "Failed to configure VS Code theme: $($_.Exception.Message)"
-}
-
-# -----------------------------
-#  Sublime Text Catppuccin
-# -----------------------------
-
-Write-Host "[*] Configuring Sublime Text Catppuccin Mocha..." -ForegroundColor Cyan
-try {
-    $sublimeExe = Get-Command sublime_text -ErrorAction SilentlyContinue
-    if (-not $sublimeExe) { $sublimeExe = Get-Command "sublime_text.exe" -ErrorAction SilentlyContinue }
-    if ($sublimeExe) {
-        # Launch Sublime once to create config dirs
-        Start-Process $sublimeExe.Path -WindowStyle Minimized
-        Start-Sleep -Seconds 5
-        Get-Process sublime_text -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-
-        $sublimeConfig = Join-Path $env:APPDATA "Sublime Text"
-        $packagesDir   = Join-Path $sublimeConfig "Packages"
-        $userDir       = Join-Path $packagesDir "User"
-        if (-not (Test-Path $userDir)) {
-            New-Item -ItemType Directory -Path $userDir -Force | Out-Null
-        }
-
-        # Install Catppuccin theme into Packages\Catppuccin
-        $catPackDir = Join-Path $packagesDir "Catppuccin"
-        if (-not (Test-Path $catPackDir)) {
-            git clone "https://github.com/catppuccin/sublime-text.git" $catPackDir 2>$null
-            Write-Host "[+] Cloned Catppuccin Sublime theme." -ForegroundColor Green
-        }
-
-        $prefsFile = Join-Path $userDir "Preferences.sublime-settings"
-        $prefs = @{}
-        if (Test-Path $prefsFile) {
-            try {
-                $pjson = Get-Content $prefsFile -Raw
-                if ($pjson.Trim()) { $prefs = $pjson | ConvertFrom-Json }
-            } catch { }
-        }
-        # Scheme name may differ; this is a best guess
-        $prefs."color_scheme" = "Packages/Catppuccin/Catppuccin Mocha.sublime-color-scheme"
-        $prefs."theme"        = "Adaptive.sublime-theme"
-
-        $prefs | ConvertTo-Json -Depth 20 | Set-Content -Path $prefsFile -Encoding UTF8
-        Write-Host "[+] Sublime configured with Catppuccin Mocha (best effort)." -ForegroundColor Green
-    } else {
-        Write-Warning "Sublime Text not found; skipping Sublime theming."
-    }
-} catch {
-    Write-Warning "Failed to configure Sublime theme: $($_.Exception.Message)"
-}
-
-# -----------------------------
-#  Obsidian Vault + Plugins + Theme
-# -----------------------------
-
-Write-Host "[*] Configuring Obsidian vault and Catppuccin theme..." -ForegroundColor Cyan
-
-$vaultRoot = Join-Path $env:USERPROFILE "Documents"
-$vaultPath = Join-Path $vaultRoot "Obsidiant_Vault"
-$obsidianDir = Join-Path $vaultPath ".obsidian"
-
-try {
-    if (-not (Test-Path $vaultPath)) {
-        New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
-        Write-Host "[+] Created Obsidian vault folder at $vaultPath" -ForegroundColor Green
-    }
-    if (-not (Test-Path $obsidianDir)) {
-        New-Item -ItemType Directory -Path $obsidianDir -Force | Out-Null
-    }
-
-    # Themes
-    $themesDir = Join-Path $obsidianDir "themes"
-    if (-not (Test-Path $themesDir)) {
-        New-Item -ItemType Directory -Path $themesDir -Force | Out-Null
-    }
-    $catThemeDir = Join-Path $themesDir "Catppuccin"
-    if (-not (Test-Path $catThemeDir)) {
-        git clone "https://github.com/catppuccin/obsidian.git" $catThemeDir 2>$null
-        Write-Host "[+] Cloned Catppuccin Obsidian theme." -ForegroundColor Green
-    }
-
-    # appearance.json
-    $appearanceFile = Join-Path $obsidianDir "appearance.json"
-    $appearance = @{}
-    if (Test-Path $appearanceFile) {
-        try {
-            $aj = Get-Content $appearanceFile -Raw
-            if ($aj.Trim()) { $appearance = $aj | ConvertFrom-Json }
-        } catch { }
-    }
-    $appearance.theme = "Catppuccin"
-    $appearance.baseColorScheme = "dark"
-    $appearance | ConvertTo-Json -Depth 20 | Set-Content -Path $appearanceFile -Encoding UTF8
-
-    # Plugins
-    $pluginsDir = Join-Path $obsidianDir "plugins"
-    if (-not (Test-Path $pluginsDir)) {
-        New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
-    }
-
-    $pluginRepos = @(
-        @{ Id = "advanced-cursors"; Repo = "https://github.com/SkepticMystic/advanced-cursors.git" },
-        @{ Id = "cm-editor-syntax-highlight-obsidian"; Repo = "https://github.com/deathau/cm-editor-syntax-highlight-obsidian.git" },
-        @{ Id = "obsidian-smarter-md-hotkeys"; Repo = "https://github.com/chrisgrieser/obsidian-smarter-md-hotkeys.git" }
-    )
-
-    foreach ($p in $pluginRepos) {
-        $pDir = Join-Path $pluginsDir $p.Id
-        if (-not (Test-Path $pDir)) {
-            git clone $p.Repo $pDir 2>$null
-            Write-Host "[+] Cloned Obsidian plugin $($p.Id)." -ForegroundColor Green
+            $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $wtSettingsPath -Encoding UTF8
+            Write-Host "[+] Windows Terminal Catppuccin Mocha scheme applied." -ForegroundColor Green
         } else {
-            Write-Host "[=] Obsidian plugin $($p.Id) directory already exists." -ForegroundColor DarkGray
+            Write-Warning "Windows Terminal settings.json not found; skipping WT theme."
         }
+    } catch {
+        Write-Warning "Failed to configure Windows Terminal theme: $($_.Exception.Message)"
     }
 
-    # Enable plugins
-    $communityFile = Join-Path $obsidianDir "community-plugins.json"
-    $enabled = @()
-    if (Test-Path $communityFile) {
-        try {
-            $cj = Get-Content $communityFile -Raw
-            if ($cj.Trim()) { $enabled = $cj | ConvertFrom-Json }
-        } catch { }
-    }
-    foreach ($p in $pluginRepos) {
-        if ($p.Id -notin $enabled) {
-            $enabled += $p.Id
+    # -----------------------------
+    #  VS Code Catppuccin Mocha
+    # -----------------------------
+
+    Write-Host "[*] Configuring VS Code Catppuccin Mocha theme..." -ForegroundColor Cyan
+    try {
+        $codeCmd = Get-Command code -ErrorAction SilentlyContinue
+        if ($codeCmd) {
+            code --install-extension Catppuccin.catppuccin-vsc --force 2>$null
+            code --install-extension Catppuccin.catppuccin-vsc-icons --force 2>$null
+            Write-Host "[+] Catppuccin VS Code theme and icons installed." -ForegroundColor Green
+
+            $settingsDir = Join-Path $env:APPDATA "Code\User"
+            $settingsFile = Join-Path $settingsDir "settings.json"
+            if (-not (Test-Path $settingsDir)) {
+                New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+            }
+            $settings = @{}
+            if (Test-Path $settingsFile) {
+                try {
+                    $json = Get-Content $settingsFile -Raw
+                    if ($json.Trim()) {
+                        $settings = $json | ConvertFrom-Json
+                    }
+                } catch { }
+            }
+
+            $settings."workbench.colorTheme" = "Catppuccin Mocha"
+            $settings."workbench.iconTheme" = "Catppuccin Icons Macchiato"
+
+            $settings | ConvertTo-Json -Depth 20 | Set-Content -Path $settingsFile -Encoding UTF8
+            Write-Host "[+] VS Code configured to use Catppuccin Mocha." -ForegroundColor Green
+        } else {
+            Write-Warning "code.exe not found; skipping VS Code theme config."
         }
-    }
-    $enabled | ConvertTo-Json -Depth 5 | Set-Content -Path $communityFile -Encoding UTF8
-
-    # Make this vault the default in global obsidian.json
-    $appDataObsidian = Join-Path $env:APPDATA "Obsidian"
-    if (-not (Test-Path $appDataObsidian)) {
-        New-Item -ItemType Directory -Path $appDataObsidian -Force | Out-Null
-    }
-    $globalConfigFile = Join-Path $appDataObsidian "obsidian.json"
-    $globalCfg = @{}
-    if (Test-Path $globalConfigFile) {
-        try {
-            $gj = Get-Content $globalConfigFile -Raw
-            if ($gj.Trim()) { $globalCfg = $gj | ConvertFrom-Json }
-        } catch { }
+    } catch {
+        Write-Warning "Failed to configure VS Code theme: $($_.Exception.Message)"
     }
 
-    if (-not $globalCfg.vaults) {
-        $globalCfg.vaults = @{}
+    # -----------------------------
+    #  Sublime Text Catppuccin
+    # -----------------------------
+
+    Write-Host "[*] Configuring Sublime Text Catppuccin Mocha..." -ForegroundColor Cyan
+    try {
+        $sublimeExe = Get-Command sublime_text -ErrorAction SilentlyContinue
+        if (-not $sublimeExe) { $sublimeExe = Get-Command "sublime_text.exe" -ErrorAction SilentlyContinue }
+        if ($sublimeExe) {
+            # Launch Sublime once to create config dirs
+            Start-Process $sublimeExe.Path -WindowStyle Minimized
+            Start-Sleep -Seconds 5
+            Get-Process sublime_text -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+            $sublimeConfig = Join-Path $env:APPDATA "Sublime Text"
+            $packagesDir   = Join-Path $sublimeConfig "Packages"
+            $userDir       = Join-Path $packagesDir "User"
+            if (-not (Test-Path $userDir)) {
+                New-Item -ItemType Directory -Path $userDir -Force | Out-Null
+            }
+
+            # Install Catppuccin theme into Packages\Catppuccin
+            $catPackDir = Join-Path $packagesDir "Catppuccin"
+            if (-not (Test-Path $catPackDir)) {
+                git clone "https://github.com/catppuccin/sublime-text.git" $catPackDir 2>$null
+                Write-Host "[+] Cloned Catppuccin Sublime theme." -ForegroundColor Green
+            }
+
+            $prefsFile = Join-Path $userDir "Preferences.sublime-settings"
+            $prefs = @{}
+            if (Test-Path $prefsFile) {
+                try {
+                    $pjson = Get-Content $prefsFile -Raw
+                    if ($pjson.Trim()) { $prefs = $pjson | ConvertFrom-Json }
+                } catch { }
+            }
+            # Scheme name may differ; this is a best guess
+            $prefs."color_scheme" = "Packages/Catppuccin/Catppuccin Mocha.sublime-color-scheme"
+            $prefs."theme"        = "Adaptive.sublime-theme"
+
+            $prefs | ConvertTo-Json -Depth 20 | Set-Content -Path $prefsFile -Encoding UTF8
+            Write-Host "[+] Sublime configured with Catppuccin Mocha (best effort)." -ForegroundColor Green
+        } else {
+            Write-Warning "Sublime Text not found; skipping Sublime theming."
+        }
+    } catch {
+        Write-Warning "Failed to configure Sublime theme: $($_.Exception.Message)"
     }
 
-    # Look for an existing vault pointing at this path
-    $existingKey = $null
-    if ($globalCfg.vaults -is [System.Management.Automation.PSCustomObject]) {
-        foreach ($prop in $globalCfg.vaults.PSObject.Properties) {
-            if ($prop.Value -and $prop.Value.path -eq $vaultPath) {
-                $existingKey = $prop.Name
-                break
+    # -----------------------------
+    #  Obsidian Vault + Plugins + Theme
+    # -----------------------------
+
+    Write-Host "[*] Configuring Obsidian vault and Catppuccin theme..." -ForegroundColor Cyan
+
+    $vaultRoot = Join-Path $env:USERPROFILE "Documents"
+    $vaultPath = Join-Path $vaultRoot "Obsidiant_Vault"
+    $obsidianDir = Join-Path $vaultPath ".obsidian"
+
+    try {
+        if (-not (Test-Path $vaultPath)) {
+            New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
+            Write-Host "[+] Created Obsidian vault folder at $vaultPath" -ForegroundColor Green
+        }
+        if (-not (Test-Path $obsidianDir)) {
+            New-Item -ItemType Directory -Path $obsidianDir -Force | Out-Null
+        }
+
+        # Themes
+        $themesDir = Join-Path $obsidianDir "themes"
+        if (-not (Test-Path $themesDir)) {
+            New-Item -ItemType Directory -Path $themesDir -Force | Out-Null
+        }
+        $catThemeDir = Join-Path $themesDir "Catppuccin"
+        if (-not (Test-Path $catThemeDir)) {
+            git clone "https://github.com/catppuccin/obsidian.git" $catThemeDir 2>$null
+            Write-Host "[+] Cloned Catppuccin Obsidian theme." -ForegroundColor Green
+        }
+
+        # appearance.json
+        $appearanceFile = Join-Path $obsidianDir "appearance.json"
+        $appearance = @{}
+        if (Test-Path $appearanceFile) {
+            try {
+                $aj = Get-Content $appearanceFile -Raw
+                if ($aj.Trim()) { $appearance = $aj | ConvertFrom-Json }
+            } catch { }
+        }
+        $appearance.theme = "Catppuccin"
+        $appearance.baseColorScheme = "dark"
+        $appearance | ConvertTo-Json -Depth 20 | Set-Content -Path $appearanceFile -Encoding UTF8
+
+        # Plugins
+        $pluginsDir = Join-Path $obsidianDir "plugins"
+        if (-not (Test-Path $pluginsDir)) {
+            New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+        }
+
+        $pluginRepos = @(
+            @{ Id = "advanced-cursors"; Repo = "https://github.com/SkepticMystic/advanced-cursors.git" },
+            @{ Id = "cm-editor-syntax-highlight-obsidian"; Repo = "https://github.com/deathau/cm-editor-syntax-highlight-obsidian.git" },
+            @{ Id = "obsidian-smarter-md-hotkeys"; Repo = "https://github.com/chrisgrieser/obsidian-smarter-md-hotkeys.git" }
+        )
+
+        foreach ($p in $pluginRepos) {
+            $pDir = Join-Path $pluginsDir $p.Id
+            if (-not (Test-Path $pDir)) {
+                git clone $p.Repo $pDir 2>$null
+                Write-Host "[+] Cloned Obsidian plugin $($p.Id)." -ForegroundColor Green
+            } else {
+                Write-Host "[=] Obsidian plugin $($p.Id) directory already exists." -ForegroundColor DarkGray
             }
         }
-    }
 
-    $nowTs = [int64]([DateTimeOffset]::Now.ToUnixTimeMilliseconds())
-
-    if ($existingKey) {
-        $globalCfg.vaults.$existingKey.path = $vaultPath
-        $globalCfg.vaults.$existingKey.ts   = $nowTs
-        $globalCfg.vaults.$existingKey.open = $true
-    } else {
-        $vaultId = [Guid]::NewGuid().ToString("N")
-        $globalCfg.vaults.$vaultId = @{
-            path = $vaultPath
-            ts   = $nowTs
-            open = $true
+        # Enable plugins
+        $communityFile = Join-Path $obsidianDir "community-plugins.json"
+        $enabled = @()
+        if (Test-Path $communityFile) {
+            try {
+                $cj = Get-Content $communityFile -Raw
+                if ($cj.Trim()) { $enabled = $cj | ConvertFrom-Json }
+            } catch { }
         }
+        foreach ($p in $pluginRepos) {
+            if ($p.Id -notin $enabled) {
+                $enabled += $p.Id
+            }
+        }
+        $enabled | ConvertTo-Json -Depth 5 | Set-Content -Path $communityFile -Encoding UTF8
+
+        # Make this vault the default in global obsidian.json
+        $appDataObsidian = Join-Path $env:APPDATA "Obsidian"
+        if (-not (Test-Path $appDataObsidian)) {
+            New-Item -ItemType Directory -Path $appDataObsidian -Force | Out-Null
+        }
+        $globalConfigFile = Join-Path $appDataObsidian "obsidian.json"
+        $globalCfg = @{}
+        if (Test-Path $globalConfigFile) {
+            try {
+                $gj = Get-Content $globalConfigFile -Raw
+                if ($gj.Trim()) { $globalCfg = $gj | ConvertFrom-Json }
+            } catch { }
+        }
+
+        if (-not $globalCfg.vaults) {
+            $globalCfg.vaults = @{}
+        }
+
+        # Look for an existing vault pointing at this path
+        $existingKey = $null
+        if ($globalCfg.vaults -is [System.Management.Automation.PSCustomObject]) {
+            foreach ($prop in $globalCfg.vaults.PSObject.Properties) {
+                if ($prop.Value -and $prop.Value.path -eq $vaultPath) {
+                    $existingKey = $prop.Name
+                    break
+                }
+            }
+        }
+
+        $nowTs = [int64]([DateTimeOffset]::Now.ToUnixTimeMilliseconds())
+
+        if ($existingKey) {
+            $globalCfg.vaults.$existingKey.path = $vaultPath
+            $globalCfg.vaults.$existingKey.ts   = $nowTs
+            $globalCfg.vaults.$existingKey.open = $true
+        } else {
+            $vaultId = [Guid]::NewGuid().ToString("N")
+            $globalCfg.vaults.$vaultId = @{
+                path = $vaultPath
+                ts   = $nowTs
+                open = $true
+            }
+        }
+
+        $globalCfg | ConvertTo-Json -Depth 20 | Set-Content -Path $globalConfigFile -Encoding UTF8
+        Write-Host "[+] Obsidian vault configured as default." -ForegroundColor Green
+
+    } catch {
+        Write-Warning "Failed to configure Obsidian vault/theme/plugins: $($_.Exception.Message)"
     }
 
-    $globalCfg | ConvertTo-Json -Depth 20 | Set-Content -Path $globalConfigFile -Encoding UTF8
-    Write-Host "[+] Obsidian vault configured as default." -ForegroundColor Green
-
-} catch {
-    Write-Warning "Failed to configure Obsidian vault/theme/plugins: $($_.Exception.Message)"
+    Write-Host "[*] For Firefox and Chrome Catppuccin themes, the script can open their theme pages for you to click 'Add'." -ForegroundColor Yellow
+    Write-Host "    (Run these manually if desired.)" -ForegroundColor Yellow
 }
-
-Write-Host "[*] For Firefox and Chrome Catppuccin themes, the script can open their theme pages for you to click 'Add'." -ForegroundColor Yellow
-Write-Host "    (Run these manually if desired.)" -ForegroundColor Yellow
 
 # -----------------------------
 #  WSL + Ubuntu Provisioning (END)

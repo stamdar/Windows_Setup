@@ -14,6 +14,7 @@ Windows Workstation Bootstrap Script
 
 param(
     [switch]$SkipDebloat
+    [switch]$SkipPackages
 )
 
 # -----------------------------
@@ -132,6 +133,8 @@ function Disable-OneDrive {
         Write-Warning "Failed to fully disable OneDrive: $($_.Exception.Message)"
     }
 }
+
+Disable-OneDrive
 
 # -----------------------------
 #  Optional Win11 Debloat
@@ -302,45 +305,52 @@ $ChocoPackages = @(
 Write-Host "[*] Taking snapshot of existing desktop shortcuts..." -ForegroundColor Cyan
 $ExistingShortcuts = Get-DesktopShortcuts
 
-foreach ($pkg in $ChocoPackages) {
-    Ensure-ChocoPackage -Id $pkg.Id -Name $pkg.Name
+if ($SkipPackages) {
+    Write-Host "[*] SkipPackages specified — skipping all Chocolatey package installations." -ForegroundColor Yellow
+} else {
+    foreach ($pkg in $ChocoPackages) {
+        Ensure-ChocoPackage -Id $pkg.Id -Name $pkg.Name
+    }
 }
 
 # -----------------------------
 #  Ensure pip and pipx on Windows
 # -----------------------------
+if (-not $SkipPackages) {
+    Write-Host "[*] Ensuring pip and pipx (Windows)..." -ForegroundColor Cyan
+    try {
+        $python = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $python) {
+            Write-Warning "Python executable not found on PATH; skipping pip/pipx setup."
+        } else {
+            Write-Host "[*] Upgrading pip..." -ForegroundColor Yellow
+            python -m pip install --upgrade pip --disable-pip-version-check
 
-Write-Host "[*] Ensuring pip and pipx (Windows)..." -ForegroundColor Cyan
-try {
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $python) {
-        Write-Warning "Python executable not found on PATH; skipping pip/pipx setup."
-    } else {
-        Write-Host "[*] Upgrading pip..." -ForegroundColor Yellow
-        python -m pip install --upgrade pip --disable-pip-version-check
+            Write-Host "[*] Installing/upgrading pipx via pip..." -ForegroundColor Yellow
+            python -m pip install --user pipx --upgrade
 
-        Write-Host "[*] Installing/upgrading pipx via pip..." -ForegroundColor Yellow
-        python -m pip install --user pipx --upgrade
+            Write-Host "[*] Running pipx ensurepath..." -ForegroundColor Yellow
+            python -m pipx ensurepath
 
-        Write-Host "[*] Running pipx ensurepath..." -ForegroundColor Yellow
-        python -m pipx ensurepath
-
-        Write-Host "[+] pip and pipx are now installed/upgraded (user scope)." -ForegroundColor Green
+            Write-Host "[+] pip and pipx are now installed/upgraded (user scope)." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "pip/pipx setup failed: $($_.Exception.Message)"
     }
-} catch {
-    Write-Warning "pip/pipx setup failed: $($_.Exception.Message)"
-}
 
-Write-Host "[*] Installing Sysinternals Suite (ignoring checksums, best effort)..." -ForegroundColor Cyan
-try {
-    choco install sysinternals -y --no-progress --ignore-checksums
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "[+] Sysinternals Suite installed (checksums ignored)." -ForegroundColor Green
-    } else {
-        Write-Warning "Sysinternals install failed with exit code $LASTEXITCODE (even with --ignore-checksums)."
+    Write-Host "[*] Installing Sysinternals Suite (ignoring checksums, best effort)..." -ForegroundColor Cyan
+    try {
+        choco install sysinternals -y --no-progress --ignore-checksums
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[+] Sysinternals Suite installed (checksums ignored)." -ForegroundColor Green
+        } else {
+            Write-Warning "Sysinternals install failed with exit code $LASTEXITCODE (even with --ignore-checksums)."
+        }
+    } catch {
+        Write-Warning "Sysinternals installation threw an exception: $($_.Exception.Message)"
     }
-} catch {
-    Write-Warning "Sysinternals installation threw an exception: $($_.Exception.Message)"
+} else {
+    Write-Host "[*] Skipping pip/pipx + Sysinternals because SkipPackages is set." -ForegroundColor DarkYellow
 }
 
 Write-Host "[*] Cleaning up newly created desktop shortcuts..." -ForegroundColor Cyan

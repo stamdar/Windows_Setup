@@ -74,6 +74,66 @@ $OS = Get-OSInfo
 Write-Host "[*] Detected OS: $($OS.Caption) ($($OS.Version))" -ForegroundColor Cyan
 
 # -----------------------------
+#  OneDrive Disable (early, idempotent)
+# -----------------------------
+function Disable-OneDrive {
+    Write-Host "[*] Disabling OneDrive (best effort)..." -ForegroundColor Cyan
+    try {
+        # Kill running OneDrive process
+        Get-Process OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+        $od32 = Join-Path $env:SystemRoot "System32\OneDriveSetup.exe"
+        $od64 = Join-Path $env:SystemRoot "SysWOW64\OneDriveSetup.exe"
+        $uninstallRan = $false
+
+        if (Test-Path $od32) {
+            Write-Host "[*] Running OneDrive uninstaller (System32)..." -ForegroundColor DarkCyan
+            & $od32 /uninstall | Out-Null
+            $uninstallRan = $true
+        }
+
+        if (Test-Path $od64) {
+            Write-Host "[*] Running OneDrive uninstaller (SysWOW64)..." -ForegroundColor DarkCyan
+            & $od64 /uninstall | Out-Null
+            $uninstallRan = $true
+        }
+
+        if ($uninstallRan) {
+            Write-Host "[+] OneDrive uninstall invoked (may require logoff/reboot to fully disappear)." -ForegroundColor Green
+        } else {
+            Write-Host "[=] OneDriveSetup.exe not found; OneDrive is likely already removed." -ForegroundColor DarkGray
+        }
+
+        # Harden via policy so it doesn't come back / auto-start
+        $oneDrivePolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive"
+        if (-not (Test-Path $oneDrivePolicyPath)) {
+            New-Item -Path $oneDrivePolicyPath -Force | Out-Null
+        }
+
+        # DisableFileSyncNGSC = 1 (Disable OneDrive file sync)
+        $currentSync = (Get-ItemProperty -Path $oneDrivePolicyPath -Name "DisableFileSyncNGSC" -ErrorAction SilentlyContinue).DisableFileSyncNGSC
+        if ($currentSync -ne 1) {
+            New-ItemProperty -Path $oneDrivePolicyPath -Name "DisableFileSyncNGSC" -Value 1 -PropertyType DWord -Force | Out-Null
+            Write-Host "[+] Policy: Disable OneDrive file sync (DisableFileSyncNGSC=1)." -ForegroundColor Green
+        } else {
+            Write-Host "[=] OneDrive file sync already disabled by policy." -ForegroundColor DarkGray
+        }
+
+        # PreventNetworkTrafficPreUserSignIn = 1 (optional hardening)
+        $currentTraffic = (Get-ItemProperty -Path $oneDrivePolicyPath -Name "PreventNetworkTrafficPreUserSignIn" -ErrorAction SilentlyContinue).PreventNetworkTrafficPreUserSignIn
+        if ($currentTraffic -ne 1) {
+            New-ItemProperty -Path $oneDrivePolicyPath -Name "PreventNetworkTrafficPreUserSignIn" -Value 1 -PropertyType DWord -Force | Out-Null
+            Write-Host "[+] Policy: Block OneDrive traffic before sign-in." -ForegroundColor Green
+        } else {
+            Write-Host "[=] OneDrive pre-sign-in traffic already blocked by policy." -ForegroundColor DarkGray
+        }
+
+    } catch {
+        Write-Warning "Failed to fully disable OneDrive: $($_.Exception.Message)"
+    }
+}
+
+# -----------------------------
 #  Optional Win11 Debloat
 # -----------------------------
 

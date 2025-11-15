@@ -27,21 +27,27 @@ function Test-IsAdmin {
 }
 
 if (-not (Test-IsAdmin)) {
-    Write-Host "[*] Not running as Administrator, attempting to elevate..." -ForegroundColor Yellow
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = (Get-Process -Id $PID).Path
-    $psi.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    $psi.Verb = "runas"
-    try {
-        $p = [System.Diagnostics.Process]::Start($psi)
-        if (-not $p) {
-            Write-Error "Elevation failed or was cancelled. Please re-run this script from an elevated PowerShell session."
-        }
+    Write-Host "[*] Not running as Administrator." -ForegroundColor Yellow
+
+    if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+        Write-Error "This script is not running from a file, so it cannot auto-elevate. Please open PowerShell as Administrator and run the script again."
+        return
     }
-    catch {
+
+    Write-Host "[*] Attempting to relaunch script as Administrator..." -ForegroundColor Yellow
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName  = (Get-Process -Id $PID).Path
+    $psi.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $psi.Verb      = "runas"
+
+    try {
+        [void][System.Diagnostics.Process]::Start($psi)
+    } catch {
         Write-Error "Elevation failed or was cancelled. Please re-run this script from an elevated PowerShell session."
     }
-    exit
+
+    # Important: just return from the script, do NOT exit the host
+    return
 }
 
 Write-Host "[+] Running as Administrator." -ForegroundColor Green
@@ -111,22 +117,18 @@ function Install-Chocolatey {
         Set-ExecutionPolicy Bypass -Scope Process -Force
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-        $chocoInstallCmd = @"
-Set-ExecutionPolicy Bypass -Scope Process -Force;
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
-iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'));
-"@
-
-        powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $chocoInstallCmd
+        # Run official install snippet *in this process*
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
         if (Get-Command choco.exe -ErrorAction SilentlyContinue) {
             Write-Host "[+] Chocolatey installed successfully." -ForegroundColor Green
         } else {
-            throw "Chocolatey installation completed, but choco.exe not found."
+            throw "Chocolatey installation completed, but choco.exe not found on PATH."
         }
     } catch {
-        Write-Error "Failed to install Chocolatey: $($_.Exception.Message)"
-        exit 1
+        Write-Warning "Failed to install Chocolatey: $($_.Exception.Message)"
+        Write-Warning "Skipping Chocolatey package installation for this run."
+        return
     }
 }
 

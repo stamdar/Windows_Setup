@@ -157,7 +157,7 @@ Disable-OneDrive
 #  Code-signing certificate helpers
 # -----------------------------
 
-function Get-OrCreate-CodeSigningCert {
+function Get-OrCreate-StampShellCodeSigningCert {
     [CmdletBinding()]
     param(
         [string]$Subject = "CN=StampShell Code Signing"
@@ -170,26 +170,27 @@ function Get-OrCreate-CodeSigningCert {
                 Select-Object -First 1
 
     if ($existing) {
-        Write-Host "[=] Reusing existing code-signing certificate: $($existing.Thumbprint)" -ForegroundColor DarkGray
+        Write-Host "[=] Reusing existing StampShell code-signing cert: $($existing.Thumbprint)" -ForegroundColor DarkGray
         return $existing
     }
 
-    Write-Host "[*] Creating new self-signed code-signing certificate..." -ForegroundColor Yellow
+    Write-Host "[*] Creating new StampShell code-signing certificate..." -ForegroundColor Yellow
 
     $cert = New-SelfSignedCertificate `
         -Type CodeSigningCert `
         -Subject $Subject `
-        -KeyExportPolicy Exportable `
-        -KeyUsage DigitalSignature `
         -KeyAlgorithm RSA `
         -KeyLength 4096 `
+        -KeyUsage DigitalSignature `
+        -KeyExportPolicy Exportable `
+        -KeyProtection None `
         -CertStoreLocation "Cert:\CurrentUser\My"
 
-    Write-Host "[+] Created code-signing certificate: $($cert.Thumbprint)" -ForegroundColor Green
+    Write-Host "[+] Created StampShell code-signing cert: $($cert.Thumbprint)" -ForegroundColor Green
     return $cert
 }
 
-function Ensure-CertificateTrusted {
+function Ensure-StampShellCertTrusted {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -206,13 +207,13 @@ function Ensure-CertificateTrusted {
         $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
 
         $existing = $store.Certificates |
-            Where-Object { $_.Thumbprint -eq $Certificate.Thumbprint }
+                    Where-Object { $_.Thumbprint -eq $Certificate.Thumbprint }
 
         if (-not $existing) {
             $store.Add($Certificate)
-            Write-Host "[+] Added code-signing cert to $($s.Location)\$($s.Name)." -ForegroundColor Green
+            Write-Host "[+] Added StampShell code-signing cert to $($s.Location)\$($s.Name)." -ForegroundColor Green
         } else {
-            Write-Host "[=] Code-signing cert already present in $($s.Location)\$($s.Name)." -ForegroundColor DarkGray
+            Write-Host "[=] StampShell cert already present in $($s.Location)\$($s.Name)." -ForegroundColor DarkGray
         }
 
         $store.Close()

@@ -469,21 +469,26 @@ if ($wt) {
 #  Default App Associations via SetUserFTA
 # -----------------------------
 
+# Resolve SetUserFTA once
+$script:SetUserFtaPath = Get-ChildItem "$env:ProgramData\chocolatey\lib\setuserfta" -Recurse -Filter "SetUserFTA.exe" -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+
+if (-not $script:SetUserFtaPath) {
+    Write-Host "[*] SetUserFTA.exe not found; default app associations will be skipped." -ForegroundColor DarkYellow
+}
+
 function Invoke-SetUserFTA {
     param(
         [Parameter(Mandatory)][string]$Extension,
         [Parameter(Mandatory)][string]$ProgId
     )
 
-    $setUserFtaPath = Get-ChildItem "$env:ProgramData\chocolatey\lib\setuserfta" -Recurse -Filter "SetUserFTA.exe" -ErrorAction SilentlyContinue |
-        Select-Object -First 1 -ExpandProperty FullName
-
-    if (-not $setUserFtaPath) {
-        Write-Warning "SetUserFTA.exe not found; skipping default app associations."
+    if (-not $script:SetUserFtaPath) {
+        # Already logged once; just bail quietly
         return
     }
 
-    & $setUserFtaPath $Extension $ProgId
+    & $script:SetUserFtaPath $Extension $ProgId
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "SetUserFTA failed for: $Extension -> $ProgId (exit $LASTEXITCODE)"
     } else {
@@ -491,47 +496,95 @@ function Invoke-SetUserFTA {
     }
 }
 
+function Test-AnyCommandExists {
+    param(
+        [Parameter(Mandatory)][string[]]$Names
+    )
+    foreach ($n in $Names) {
+        if (Get-Command $n -ErrorAction SilentlyContinue) {
+            return $true
+        }
+    }
+    return $false
+}
+
 Write-Host "[*] Configuring default applications with SetUserFTA..." -ForegroundColor Cyan
 
-# Note: ProgIDs may vary by install; adjust if needed.
-# Sublime via Applications ProgID
-$SublimeProgId = "Applications\sublime_text.exe"
-# VS Code via Applications ProgID
-$VSCodeProgId = "Applications\Code.exe"
-# Adobe Reader DC
-$AdobePdfProgId = "AcroExch.Document.DC"
-# Wireshark pcap
-$WiresharkProgId = "Wireshark.pcap"
-# Chrome
-$ChromeProgId = "ChromeHTML"
-# Obsidian (may need adjustment)
-$ObsidianProgId = "Obsidian.md"
+if (-not $script:SetUserFtaPath) {
+    Write-Host "[*] Skipping default app associations because SetUserFTA is not installed." -ForegroundColor DarkYellow
+} else {
+    # Note: ProgIDs may vary by install; adjust if needed.
+    # Sublime via Applications ProgID
+    $SublimeProgId    = "Applications\sublime_text.exe"
+    # VS Code via Applications ProgID
+    $VSCodeProgId     = "Applications\Code.exe"
+    # Adobe Reader DC
+    $AdobePdfProgId   = "AcroExch.Document.DC"
+    # Wireshark pcap
+    $WiresharkProgId  = "Wireshark.pcap"
+    # Chrome
+    $ChromeProgId     = "ChromeHTML"
+    # Obsidian (may need adjustment)
+    $ObsidianProgId   = "Obsidian.md"
 
-# Sublime for text-ish
-".txt",".log",".ini",".cfg",".conf" | ForEach-Object {
-    Invoke-SetUserFTA $_ $SublimeProgId
+    # Detect which apps are actually installed
+    $HasSublime   = Test-AnyCommandExists @('sublime_text','sublime_text.exe')
+    $HasVSCode    = Test-AnyCommandExists @('code','code.cmd','Code.exe')
+    $HasAdobe     = Test-AnyCommandExists @('AcroRd32.exe','acrord32')
+    $HasWireshark = Test-AnyCommandExists @('wireshark','wireshark.exe')
+    $HasChrome    = Test-AnyCommandExists @('chrome','chrome.exe')
+    $HasObsidian  = Test-AnyCommandExists @('obsidian','obsidian.exe')
+
+    # Sublime for text-ish
+    if ($HasSublime) {
+        ".txt",".log",".ini",".cfg",".conf" | ForEach-Object {
+            Invoke-SetUserFTA $_ $SublimeProgId
+        }
+    } else {
+        Write-Host "[=] Sublime Text not found; skipping text file associations." -ForegroundColor DarkGray
+    }
+
+    # VS Code for code-ish
+    if ($HasVSCode) {
+        ".c",".h",".hpp",".cpp",".cc",".py",".ps1",".js",".ts",".json",".yml",".yaml",".go",".rs",".lua",".rb" | ForEach-Object {
+            Invoke-SetUserFTA $_ $VSCodeProgId
+        }
+    } else {
+        Write-Host "[=] VS Code not found; skipping code file associations." -ForegroundColor DarkGray
+    }
+
+    # Adobe for PDFs
+    if ($HasAdobe) {
+        Invoke-SetUserFTA ".pdf" $AdobePdfProgId
+    } else {
+        Write-Host "[=] Adobe Reader not found; skipping PDF association." -ForegroundColor DarkGray
+    }
+
+    # Wireshark for captures
+    if ($HasWireshark) {
+        Invoke-SetUserFTA ".pcap"   $WiresharkProgId
+        Invoke-SetUserFTA ".pcapng" $WiresharkProgId
+    } else {
+        Write-Host "[=] Wireshark not found; skipping pcap associations." -ForegroundColor DarkGray
+    }
+
+    # Chrome as default browser
+    if ($HasChrome) {
+        Invoke-SetUserFTA "http"    $ChromeProgId
+        Invoke-SetUserFTA "https"   $ChromeProgId
+        Invoke-SetUserFTA ".htm"    $ChromeProgId
+        Invoke-SetUserFTA ".html"   $ChromeProgId
+    } else {
+        Write-Host "[=] Chrome not found; skipping browser associations." -ForegroundColor DarkGray
+    }
+
+    # Obsidian for markdown
+    if ($HasObsidian) {
+        Invoke-SetUserFTA ".md" $ObsidianProgId
+    } else {
+        Write-Host "[=] Obsidian not found; skipping .md association." -ForegroundColor DarkGray
+    }
 }
-
-# VS Code for code-ish
-".c",".h",".hpp",".cpp",".cc",".py",".ps1",".js",".ts",".json",".yml",".yaml",".go",".rs",".lua",".rb" | ForEach-Object {
-    Invoke-SetUserFTA $_ $VSCodeProgId
-}
-
-# Adobe for PDFs
-Invoke-SetUserFTA ".pdf"    $AdobePdfProgId
-
-# Wireshark for captures
-Invoke-SetUserFTA ".pcap"   $WiresharkProgId
-Invoke-SetUserFTA ".pcapng" $WiresharkProgId
-
-# Chrome as default browser
-Invoke-SetUserFTA "http"    $ChromeProgId
-Invoke-SetUserFTA "https"   $ChromeProgId
-Invoke-SetUserFTA ".htm"    $ChromeProgId
-Invoke-SetUserFTA ".html"   $ChromeProgId
-
-# Obsidian for markdown
-Invoke-SetUserFTA ".md"     $ObsidianProgId
 
 # -----------------------------
 #  Privacy / Telemetry / Search / Lock Screen
@@ -654,7 +707,7 @@ function Get-AppsFolderItem {
     param(
         [Parameter(Mandatory)][string]$AppIdOrName
     )
-    $shell = New-Object -ComObject Shell.Application
+    $shell      = New-Object -ComObject Shell.Application
     $appsFolder = $shell.Namespace("shell:AppsFolder")
     foreach ($item in $appsFolder.Items()) {
         if ($item.Name -eq $AppIdOrName -or $item.Path -like "*$AppIdOrName*") {
@@ -662,6 +715,42 @@ function Get-AppsFolderItem {
         }
     }
     return $null
+}
+
+function Test-TaskbarCandidatePresent {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [string]$StartMenuPattern
+    )
+
+    # First try AppsFolder
+    $item = $null
+    try {
+        $item = Get-AppsFolderItem -AppIdOrName $AppName
+    } catch { }
+
+    if ($item) { return $true }
+
+    # Fallback: look for Start Menu shortcut
+    if (-not $StartMenuPattern) {
+        $StartMenuPattern = "*$AppName*.lnk"
+    }
+
+    $startRoots = @(
+        "$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
+        "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+    ) | Where-Object { Test-Path $_ }
+
+    foreach ($root in $startRoots) {
+        try {
+            $lnk = Get-ChildItem -Path $root -Filter "*.lnk" -Recurse -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -like $StartMenuPattern } |
+                   Select-Object -First 1
+            if ($lnk) { return $true }
+        } catch { }
+    }
+
+    return $false
 }
 
 function Pin-AppToTaskbar {
@@ -701,7 +790,6 @@ function Pin-AppToTaskbar {
     # Fallback: search Start Menu .lnk
     # ----------------------------
     if (-not $StartMenuPattern) {
-        # Default pattern if nothing specified
         $StartMenuPattern = "*$AppName*.lnk"
     }
 
@@ -738,7 +826,7 @@ function Pin-AppToTaskbar {
                 return
             }
         } catch {
-            # just try next root
+            # try next root
         }
     }
 
@@ -760,6 +848,46 @@ function Unpin-AppFromTaskbar {
     } catch {
         Write-Warning "Failed to unpin ${AppName}: $($_.Exception.Message)"
     }
+}
+
+if ($OS.IsClient) {
+    Write-Host "[*] Customizing taskbar layout..." -ForegroundColor Cyan
+
+    # Unpin common default apps (best effort)
+    $DefaultUnpins = @(
+        "Microsoft Edge",
+        "Microsoft Store",
+        "Mail",
+        "Calendar"
+    )
+    foreach ($name in $DefaultUnpins) {
+        Unpin-AppFromTaskbar -AppName $name
+    }
+
+    # Desired order after Explorer:
+    # Windows Terminal, Sublime, VSCode, Obsidian, Firefox, Chrome
+    $PinOrder = @(
+        @{ Name = "Windows Terminal";    Pattern = "*Windows Terminal*.lnk" },
+        @{ Name = "Sublime Text";        Pattern = "*Sublime Text*.lnk" },
+        @{ Name = "Visual Studio Code";  Pattern = "*Visual Studio Code*.lnk" },
+        @{ Name = "Obsidian";            Pattern = "*Obsidian*.lnk" },
+        @{ Name = "Mozilla Firefox";     Pattern = "*Firefox*.lnk" },
+        @{ Name = "Google Chrome";       Pattern = "*Chrome*.lnk" }
+    )
+
+    foreach ($app in $PinOrder) {
+        if (-not (Test-TaskbarCandidatePresent -AppName $app.Name -StartMenuPattern $app.Pattern)) {
+            Write-Host "[=] $($app.Name) not found (not installed or no Start Menu entry); skipping taskbar pin." -ForegroundColor DarkGray
+            continue
+        }
+
+        Unpin-AppFromTaskbar -AppName $app.Name
+        Start-Sleep -Milliseconds 200
+        Pin-AppToTaskbar -AppName $app.Name -StartMenuPattern $app.Pattern
+        Start-Sleep -Milliseconds 200
+    }
+} else {
+    Write-Host "[*] Non-client OS detected; skipping taskbar layout customization." -ForegroundColor DarkYellow
 }
 
 if ($OS.IsClient) {

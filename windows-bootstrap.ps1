@@ -154,6 +154,97 @@ function Disable-OneDrive {
 Disable-OneDrive
 
 # -----------------------------
+#  Code-signing certificate helpers
+# -----------------------------
+
+function Get-OrCreate-CodeSigningCert {
+    [CmdletBinding()]
+    param(
+        [string]$Subject = "CN=StampShell Code Signing"
+    )
+
+    # Try to find an existing code-signing cert for this subject
+    $existing = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
+                Where-Object { $_.Subject -eq $Subject } |
+                Sort-Object NotAfter -Descending |
+                Select-Object -First 1
+
+    if ($existing) {
+        Write-Host "[=] Reusing existing code-signing certificate: $($existing.Thumbprint)" -ForegroundColor DarkGray
+        return $existing
+    }
+
+    Write-Host "[*] Creating new self-signed code-signing certificate..." -ForegroundColor Yellow
+
+    $cert = New-SelfSignedCertificate `
+        -Type CodeSigningCert `
+        -Subject $Subject `
+        -KeyExportPolicy Exportable `
+        -KeyUsage DigitalSignature `
+        -KeyAlgorithm RSA `
+        -KeyLength 4096 `
+        -CertStoreLocation "Cert:\CurrentUser\My"
+
+    Write-Host "[+] Created code-signing certificate: $($cert.Thumbprint)" -ForegroundColor Green
+    return $cert
+}
+
+function Ensure-CertificateTrusted {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate
+    )
+
+    $stores = @(
+        @{ Name = "TrustedPublisher"; Location = "CurrentUser" },
+        @{ Name = "Root";             Location = "CurrentUser" }
+    )
+
+    foreach ($s in $stores) {
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($s.Name, $s.Location)
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+
+        $existing = $store.Certificates |
+            Where-Object { $_.Thumbprint -eq $Certificate.Thumbprint }
+
+        if (-not $existing) {
+            $store.Add($Certificate)
+            Write-Host "[+] Added code-signing cert to $($s.Location)\$($s.Name)." -ForegroundColor Green
+        } else {
+            Write-Host "[=] Code-signing cert already present in $($s.Location)\$($s.Name)." -ForegroundColor DarkGray
+        }
+
+        $store.Close()
+    }
+}
+
+function Sign-FileWithCodeSigningCert {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate
+    )
+
+    if (-not (Test-Path $Path)) {
+        Write-Warning "Cannot sign '$Path' – file not found."
+        return
+    }
+
+    try {
+        $sig = Set-AuthenticodeSignature -FilePath $Path -Certificate $Certificate -ErrorAction Stop
+        if ($sig.Status -eq 'Valid') {
+            Write-Host "[+] Successfully signed '$Path' with code-signing certificate." -ForegroundColor Green
+        } else {
+            Write-Warning "Signature on '$Path' has status '$($sig.Status)'."
+        }
+    } catch {
+        Write-Warning "Failed to sign '$Path': $($_.Exception.Message)"
+    }
+}
+
+# -----------------------------
 #  Optional Win11 Debloat
 # -----------------------------
 
@@ -919,11 +1010,16 @@ try {
 }
 
 $CoreModules = @(
-    "PSReadLine", "Terminal-Icons", "posh-git", "PSFzf"
+    "PSReadLine",
+    "Terminal-Icons",
+    "posh-git",
+    "PSFzf"
 )
 
 $ExtraModules = @(
-    "PowerForensics", "HAWK", "Pester", "ImportExcel"
+    "HAWK",
+    "Pester",
+    "ImportExcel"
 )
 
 foreach ($m in $CoreModules + $ExtraModules) {
@@ -956,14 +1052,35 @@ try {
 
     Write-Host "[+] Downloaded profile to $PROFILE" -ForegroundColor Green
 
-    # Load it immediately for current session
+    # --- Code-signing: create/reuse cert, trust it, and sign the profile ---
+    try {
+        $csCert = Get-OrCreate-CodeSigningCert
+        Ensure-CertificateTrusted -Certificate $csCert
+        Sign-FileWithCodeSigningCert -Path $PROFILE -Certificate $csCert
+    } catch {
+        Write-Warning "Failed to create/trust/sign profile with code-signing certificate: $($_.Exception.Message)"
+    }
+
+    # Optionally set CurrentUser execution policy to AllSigned so the signed profile is allowed
+    try {
+        $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser -ErrorAction SilentlyContinue
+        if ($currentPolicy -ne 'AllSigned') {
+            Write-Host "[*] Setting CurrentUser execution policy to AllSigned so the signed profile will load." -ForegroundColor Yellow
+            Set-ExecutionPolicy -ExecutionPolicy AllSigned -Scope CurrentUser -Force
+        } else {
+            Write-Host "[=] CurrentUser execution policy already AllSigned." -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Warning "Failed to set execution policy to AllSigned: $($_.Exception.Message)"
+    }
+
+    # Load it immediately for current session (current process is already Bypass)
     . $PROFILE
     Write-Host "[+] Loaded profile into current session." -ForegroundColor Green
 }
 catch {
     Write-Warning "Failed to download or load remote profile: $($_.Exception.Message)"
 }
-
 
 # =============================
 #  Theming (SkipTheming-aware)

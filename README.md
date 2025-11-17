@@ -9,6 +9,11 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 irm "https://raw.githubusercontent.com/stamdar/Windows_Setup/main/windows-bootstrap.ps1" | iex
 ````
 
+### Run from internet with args
+```
+irm "https://raw.githubusercontent.com/stamdar/Windows_Setup/main/windows-bootstrap.ps1" | iex -SkipDebloat -SkipPackages
+```
+
 ### Run after cloning the repo
 
 ```powershell

@@ -112,7 +112,7 @@ All parameters are optional switches; combine them as needed.
 * Windows Terminal auto-start at login
 * Best-effort deterministic taskbar ordering:
 
-  * Unpins some default junk (Edge, Store, Mail, Calendar where possible)
+  * Unpins some default junk (Edge, Store, Mail, Outlook, Copilot, Calendar where possible)
   * Pins, in order (after File Explorer):
 
     * Windows Terminal
@@ -122,7 +122,7 @@ All parameters are optional switches; combine them as needed.
     * Firefox
     * Chrome
 
-> Taskbar pin/unpin behavior is best-effort and may vary across Windows builds / languages.
+> Taskbar pin/unpin behavior is best-effort and may vary across Windows builds / languages. Does not work on windows 11.
 
 ---
 

@@ -858,7 +858,9 @@ if ($OS.IsClient) {
         "Microsoft Edge",
         "Microsoft Store",
         "Mail",
-        "Calendar"
+        "Calendar",
+        "Outlook",
+        "Copilot"
     )
     foreach ($name in $DefaultUnpins) {
         Unpin-AppFromTaskbar -AppName $name
@@ -881,41 +883,6 @@ if ($OS.IsClient) {
             continue
         }
 
-        Unpin-AppFromTaskbar -AppName $app.Name
-        Start-Sleep -Milliseconds 200
-        Pin-AppToTaskbar -AppName $app.Name -StartMenuPattern $app.Pattern
-        Start-Sleep -Milliseconds 200
-    }
-} else {
-    Write-Host "[*] Non-client OS detected; skipping taskbar layout customization." -ForegroundColor DarkYellow
-}
-
-if ($OS.IsClient) {
-    Write-Host "[*] Customizing taskbar layout..." -ForegroundColor Cyan
-
-    # Unpin common default apps (best effort)
-    $DefaultUnpins = @(
-        "Microsoft Edge",
-        "Microsoft Store",
-        "Mail",
-        "Calendar"
-    )
-    foreach ($name in $DefaultUnpins) {
-        Unpin-AppFromTaskbar -AppName $name
-    }
-
-    # Desired order after Explorer:
-    # Windows Terminal, Sublime, VSCode, Obsidian, Firefox, Chrome
-    $PinOrder = @(
-        @{ Name = "Windows Terminal";    Pattern = "*Windows Terminal*.lnk" },
-        @{ Name = "Sublime Text";        Pattern = "*Sublime Text*.lnk" },
-        @{ Name = "Visual Studio Code";  Pattern = "*Visual Studio Code*.lnk" },
-        @{ Name = "Obsidian";            Pattern = "*Obsidian*.lnk" },
-        @{ Name = "Mozilla Firefox";     Pattern = "*Firefox*.lnk" },
-        @{ Name = "Google Chrome";       Pattern = "*Chrome*.lnk" }
-    )
-
-    foreach ($app in $PinOrder) {
         Unpin-AppFromTaskbar -AppName $app.Name
         Start-Sleep -Milliseconds 200
         Pin-AppToTaskbar -AppName $app.Name -StartMenuPattern $app.Pattern

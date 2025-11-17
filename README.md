@@ -11,7 +11,7 @@ irm "https://raw.githubusercontent.com/stamdar/Windows_Setup/main/windows-bootst
 
 ### Run from internet with args
 ```
-irm "https://raw.githubusercontent.com/stamdar/Windows_Setup/main/windows-bootstrap.ps1" | iex -SkipDebloat -SkipPackages
+iex "& { $(irm 'https://raw.githubusercontent.com/stamdar/Windows_Setup/main/windows-bootstrap.ps1') } -SkipDebloat -SkipPackages"
 ```
 
 ### Run after cloning the repo

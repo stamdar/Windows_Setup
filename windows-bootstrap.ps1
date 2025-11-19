@@ -1048,7 +1048,7 @@ try {
         New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
     }
 
-    $profileUrl = "https://raw.githubusercontent.com/stamdar/StampShell_Profile/refs/heads/main/profile.ps1"
+    $profileUrl = "https://raw.githubusercontent.com/stamdar/StampShell_tweaks/refs/heads/main/profile.ps1"
     Invoke-WebRequest -Uri $profileUrl -OutFile $PROFILE -UseBasicParsing -ErrorAction Stop
 
     Write-Host "[+] Downloaded profile to $PROFILE" -ForegroundColor Green
